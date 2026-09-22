@@ -1,0 +1,12 @@
+project:
+  name: "sample-stm32"
+
+context:
+  max_tokens: 3000
+  constitution_file: "./standards/constitution.md"
+
+llm:
+  provider: "openai_compatible"
+  model: "Qwen3.8-27B"
+  max_tokens: 8192
+  temperature: 0.1

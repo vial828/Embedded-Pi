@@ -1,0 +1,22 @@
+{
+  "markdown.styles": [
+    ".vscode/markdown-preview.css"
+  ],
+  "markdown.preview.security.level": "allow-insecure-content",
+  "workbench.editor.centeredLayoutAutoResize": false,
+  "workbench.editor.centeredLayoutFixedWidth": false,
+  "workbench.editor.enablePreview": false,
+  "editor.wordWrap": "off",
+  "editor.minimap.enabled": false,
+  "editor.lineNumbers": "off",
+  "editor.glyphMargin": false,
+  "editor.folding": false,
+  "editor.renderWhitespace": "none",
+  "editor.guides.indentation": false,
+  "editor.guides.bracketPairs": false,
+  "breadcrumbs.enabled": false,
+  "editor.stickyScroll.enabled": false,
+  "workbench.activityBar.visible": false,
+  "workbench.statusBar.visible": false,
+  "workbench.editor.showTabs": "single"
+}
