@@ -1,6 +1,3 @@
-class LLMClient:
-    """M0 LLM client stub."""
+from firmware_agent.slices.S20_LLMClient_and_Tools.client import LLMClient
 
-    def generate(self, context: str) -> str:
-        # Placeholder until provider integration in Phase 0/1.
-        return f"[stub] generated from context ({len(context)} chars)"
+__all__ = ["LLMClient"]

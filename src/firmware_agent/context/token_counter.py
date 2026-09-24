@@ -1,5 +1,3 @@
-def estimate_tokens(text: str) -> int:
-    """Cheap approximation for M0."""
-    if not text:
-        return 0
-    return max(1, len(text) // 4)
+from firmware_agent.slices.S17_Context_Assembler.token_counter import estimate_tokens
+
+__all__ = ["estimate_tokens"]

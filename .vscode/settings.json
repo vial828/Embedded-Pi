@@ -5,7 +5,8 @@
   "markdown.preview.security.level": "allow-insecure-content",
   "workbench.editor.centeredLayoutAutoResize": false,
   "workbench.editor.centeredLayoutFixedWidth": false,
-  "workbench.editor.enablePreview": false,
+  "workbench.editor.enablePreview": true,
+  "markdown.mermaid.enabled": true,
   "editor.wordWrap": "off",
   "editor.minimap.enabled": false,
   "editor.lineNumbers": "off",
@@ -16,7 +17,7 @@
   "editor.guides.bracketPairs": false,
   "breadcrumbs.enabled": false,
   "editor.stickyScroll.enabled": false,
-  "workbench.activityBar.visible": false,
   "workbench.statusBar.visible": false,
-  "workbench.editor.showTabs": "single"
+  "workbench.editor.showTabs": "single",
+  "workbench.activityBar.location": "hidden"
 }

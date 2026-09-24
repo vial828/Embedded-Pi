@@ -1,15 +1,6 @@
-from pathlib import Path
+from firmware_agent.slices.S17_Context_Assembler.constitution import (
+    DEFAULT_CONSTITUTION,
+    load_constitution,
+)
 
-
-DEFAULT_CONSTITUTION = """## Hard Rules
-- Always verify generated code via compile step.
-- Do not guess register values; query project data/tools.
-- On uncertainty, return [NEED_CLARIFICATION: ...].
-"""
-
-
-def load_constitution(path: str) -> str:
-    p = Path(path)
-    if p.exists():
-        return p.read_text(encoding="utf-8")
-    return DEFAULT_CONSTITUTION
+__all__ = ["DEFAULT_CONSTITUTION", "load_constitution"]
