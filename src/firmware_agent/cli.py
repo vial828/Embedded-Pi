@@ -13,6 +13,7 @@ from firmware_agent.project_layout import (
     reset_system_design_template,
 )
 from firmware_agent.schema.compiler import compile_system_design
+from firmware_agent.workflow import run_workflow
 
 console = Console()
 
@@ -58,8 +59,9 @@ def entry(
     check_only: bool = typer.Option(False, "--check-only", help="Only check layout, do not create missing items"),
     schema_compile: bool = typer.Option(False, "--schema-compile", help="Compile Docs/ai-generation/fw-architecture/system-design/system-design.md into fixed JSON outputs"),
     reset_schema_template: bool = typer.Option(False, "--reset-schema-template", help="Force-regenerate canonical system-design.md template"),
-    run_agent: bool = typer.Option(False, "--run", help="Run agent after ensuring layout"),
+    run_agent: bool = typer.Option(False, "--run", help="Run legacy agent after ensuring layout"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Used with --run"),
+    workflow: bool = typer.Option(True, "--workflow/--no-workflow", help="Run the resumable workflow MVP (default on)"),
 ) -> None:
     """
     Usage:
@@ -98,6 +100,10 @@ def entry(
             console.print("[red]SCHEMA COMPILE FAIL[/red]")
             console.print(msg)
             raise typer.Exit(code=4)
+
+    if workflow:
+        run_workflow(root)
+        return
 
     if run_agent:
         agent = FirmwareAgent(str(root))

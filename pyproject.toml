@@ -21,6 +21,7 @@ dev = ["pytest>=8.3", "ruff>=0.6"]
 
 [project.scripts]
 epi = "firmware_agent.main:main"
+epi-mvp = "firmware_agent.mvp:main"
 embedded-pi = "firmware_agent.main:main"
 fa = "firmware_agent.main:main"
 

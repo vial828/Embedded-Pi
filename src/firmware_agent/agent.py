@@ -7,6 +7,7 @@ from firmware_agent.context.assembler import ContextAssembler
 from firmware_agent.llm.client import LLMClient
 from firmware_agent.memory.store import ConstraintRecord, DecisionRecord, MemoryStore
 from firmware_agent.planner import TaskPlanner
+from firmware_agent.slices.S09_PRD_Ingestion.prd_ingestion import ingest_prd
 from firmware_agent.state import WorkingState
 from firmware_agent.verifier.base import Verifier
 
@@ -22,6 +23,7 @@ class FirmwareAgent:
         self.llm = LLMClient()
         self.verifier = Verifier()
         self.memory = MemoryStore(self.workspace_dir)
+        self.prd_index_path = ingest_prd(self.workspace_dir)
         self._bootstrap_memory_constraints()
 
     @staticmethod

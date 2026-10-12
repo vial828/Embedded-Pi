@@ -13,7 +13,7 @@ class ContextAssembler:
         self.config = config
         constitution_path = Path(project_root) / config.context.constitution_file
         self.constitution = load_constitution(str(constitution_path.resolve()))
-        self.max_tokens = config.context.max_tokens
+        self.max_tokens = config.resolved_context_tokens()
 
     def assemble(self, task: Task, state: WorkingState, long_memory_pack: str = "") -> str:
         parts = [

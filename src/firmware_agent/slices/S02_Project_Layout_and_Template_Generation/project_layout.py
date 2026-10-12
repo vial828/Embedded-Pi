@@ -109,7 +109,7 @@ SYSTEM_DESIGN_TEMPLATE = """# Embedded-Pi System Design Schema
 """
 
 REQUIRED_FILES = {
-    f"{DOCS_ROOT}/config.yaml": """project:\n  name: \"demo-project\"\n  description: \"\"\n\nmcu:\n  part: \"STM32F407VGT6\"\n\ntoolchain:\n  compiler: \"arm-none-eabi-gcc\"\n\npaths:\n  registers: \"./hardware/registers/\"\n  bsp: \"./bsp/\"\n  schematic: \"./hardware/schematic/\"\n  coding_standard: \"./standards/coding_standard.md\"\n  process_spec: \"./standards/process_spec.yaml\"\n\ncontext:\n  max_tokens: 3000\n  constitution_file: \"./standards/constitution.md\"\n\nllm:\n  provider: \"openai_compatible\"\n  model: \"Qwen3.8-27B\"\n  max_tokens: 8192\n  temperature: 0.1\n""",
+    f"{DOCS_ROOT}/config.yaml": """project:\n  name: \"demo-project\"\n  description: \"\"\n\nmcu:\n  part: \"STM32F407VGT6\"\n\ntoolchain:\n  compiler: \"arm-none-eabi-gcc\"\n\npaths:\n  registers: \"./hardware/registers/\"\n  bsp: \"./bsp/\"\n  schematic: \"./hardware/schematic/\"\n  coding_standard: \"./standards/coding_standard.md\"\n  process_spec: \"./standards/process_spec.yaml\"\n\ncontext:\n  max_tokens: null\n  reserve_tokens: 8192\n  constitution_file: \"./standards/constitution.md\"\n\nllm:\n  provider: \"openai_compatible\"\n  model: \"Qwen3.8-27B\"\n  max_tokens: 8192\n  context_length: 262144\n  temperature: 0.1\n""",
     f"{DOCS_ROOT}/prd/requirements.md": "# Requirements\n",
     f"{DOCS_ROOT}/hardware/pin_map.json": "{}\n",
     f"{DOCS_ROOT}/standards/coding_standard.md": "# Coding Standard\n",
