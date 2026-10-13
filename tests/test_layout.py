@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from firmware_agent.project_layout import (
+    GENERATED_ARTIFACT_FILES,
     REQUIRED_FILES,
     SYSTEM_DESIGN_REL_PATH,
     ensure_project_layout,
@@ -85,14 +86,55 @@ def test_incremental_sync_does_not_overwrite_system_design_without_reset(tmp_pat
     assert schema_path.read_text(encoding="utf-8") == "# Custom Schema\n"
 
 
-def test_incremental_sync_overwrites_generated_knowledge_files(tmp_path: Path):
+def test_incremental_sync_preserves_generated_artifacts(tmp_path: Path):
+    """Generated outputs must survive repeated `epi` runs.
+
+    Regression: they resolved to SYNC_MANAGED, so ensure_project_layout() rewrote them
+    back to their empty seed template on every run - and it runs before the workflow
+    that produces them.
+    """
     project = tmp_path / "demo6"
     ensure_project_layout(project)
 
-    generated_rules = project / "Docs" / "ai-generation" / "knowledge" / "rules.json"
-    generated_rules.write_text('{"version":"custom","rules":[{"id":"R1"}]}\n', encoding="utf-8")
+    payload = '{"version":"custom","rules":[{"id":"R1"}]}\n'
+    touched = []
+    for rel in sorted(GENERATED_ARTIFACT_FILES):
+        target = project / rel
+        target.write_text(payload, encoding="utf-8")
+        touched.append(target)
 
     report = ensure_project_layout(project)
 
-    assert generated_rules.read_text(encoding="utf-8") == REQUIRED_FILES["Docs/ai-generation/knowledge/rules.json"]
-    assert "Docs/ai-generation/knowledge/rules.json" in report.updated_files
+    for target in touched:
+        assert target.read_text(encoding="utf-8") == payload
+    assert not set(report.updated_files) & GENERATED_ARTIFACT_FILES
+
+
+def test_generated_requirements_survive_layout_resync(tmp_path: Path):
+    """Exact incident: ingest_prd wrote requirements, a later bare `epi` run wiped them."""
+    project = tmp_path / "demo7"
+    ensure_project_layout(project)
+
+    index = project / "Docs" / "ai-generation" / "knowledge" / "requirements_index.json"
+    index.write_text(
+        '{"version":"0.1","requirements":[{"req_id":"R-001","title":"Power On/Off"}]}\n',
+        encoding="utf-8",
+    )
+
+    ensure_project_layout(project)
+
+    assert "Power On/Off" in index.read_text(encoding="utf-8")
+
+
+def test_static_scaffold_is_still_synced(tmp_path: Path):
+    """The fix must not disable syncing of genuinely static ai-generation scaffolds."""
+    project = tmp_path / "demo8"
+    ensure_project_layout(project)
+
+    readme = project / "Docs" / "ai-generation" / "fw-architecture" / "README.md"
+    readme.write_text("# stale\n", encoding="utf-8")
+
+    report = ensure_project_layout(project)
+
+    assert readme.read_text(encoding="utf-8") == REQUIRED_FILES["Docs/ai-generation/fw-architecture/README.md"]
+    assert "Docs/ai-generation/fw-architecture/README.md" in report.updated_files

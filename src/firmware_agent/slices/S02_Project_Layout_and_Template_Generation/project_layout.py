@@ -139,6 +139,20 @@ class FilePolicy(str, Enum):
     SYNC_MANAGED = "sync_managed"
 
 
+# Outputs written by generators (ingestion / compilation / memory promotion).
+# Their REQUIRED_FILES entries are seed templates only: re-syncing them on every
+# `epi` run would destroy real generated data, because ensure_project_layout() runs
+# before the workflow that produces it (and the workflow state machine will not
+# regenerate it a second time).
+GENERATED_ARTIFACT_FILES: set[str] = {
+    f"{DOCS_ROOT}/ai-generation/system-design.compiled.json",
+    f"{DOCS_ROOT}/ai-generation/memory/candidate_memory.json",
+    f"{DOCS_ROOT}/ai-generation/knowledge/rules.json",
+    f"{DOCS_ROOT}/ai-generation/knowledge/requirements_index.json",
+    f"{DOCS_ROOT}/ai-generation/knowledge/register_index.json",
+    f"{DOCS_ROOT}/ai-generation/knowledge/artifact_graph.json",
+}
+
 # User-authored artifacts should never be overwritten during regular epi runs.
 USER_AUTHORED_FILE_POLICIES: dict[str, FilePolicy] = {
     f"{DOCS_ROOT}/config.yaml": FilePolicy.CREATE_ONLY,
@@ -149,11 +163,12 @@ USER_AUTHORED_FILE_POLICIES: dict[str, FilePolicy] = {
     f"{DOCS_ROOT}/standards/constitution.md": FilePolicy.CREATE_ONLY,
     f"{DOCS_ROOT}/toolchain/build.yaml": FilePolicy.CREATE_ONLY,
     SYSTEM_DESIGN_REL_PATH: FilePolicy.CREATE_ONLY,
+    **{rel: FilePolicy.CREATE_ONLY for rel in GENERATED_ARTIFACT_FILES},
 }
 
 
 def _resolve_file_policy(rel: str) -> FilePolicy:
-    """All ai-generation scaffolds are managed and always synced, except authored schema source."""
+    """Static ai-generation scaffolds are synced; authored sources and generated outputs are not."""
     if rel in USER_AUTHORED_FILE_POLICIES:
         return FilePolicy.CREATE_ONLY
 
