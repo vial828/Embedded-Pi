@@ -11,10 +11,34 @@ from pathlib import Path
 _USER_STORY_HEADER_RE = re.compile(r"^User Story:\s*(.+?)\s*$")
 _USER_STORY_ID_RE = re.compile(r"\bUser Story\s+(\d+)\b", re.IGNORECASE)
 _PAGE_RE = re.compile(r"^Page\s+\d+\s+of\s+\d+\s*$")
+_PAGE_FOOTER_RE = re.compile(r"Page\s+(\d+)\s+of\s+\d+\s*$")
 _AZURE_WI_ID_RE = re.compile(r"/edit/(\d+)(?:[/?#].*)?$")
+# Source typo included: the export contains both "Please refer to" and "Pease refer to".
+_STUB_RE = re.compile(r"^\s*p[l]?ease refer to\b", re.IGNORECASE)
+_DOC_TITLE = "ADO User Story Export"
 _DOCX_EXTS = {".docx", ".docm", ".dotx", ".dotm"}
 _PDF_EXTS = {".pdf"}
 _MD_EXTS = {".md", ".markdown", ".mdown"}
+
+
+def _is_noise_line(text: str) -> bool:
+    """Running header/footer noise that the ADO export repeats on every page.
+
+    The footer repeats the story title, e.g. ``User Story: RDP on Set  Page 7 of 37``.
+    Treated as a story header it fabricates a content-less duplicate, so it must be
+    dropped before header matching.
+    """
+    if text == _DOC_TITLE:
+        return True
+    if _PAGE_RE.match(text):
+        return True
+    return bool(_PAGE_FOOTER_RE.search(text))
+
+
+def _advance_page(text: str, current: int) -> int:
+    """A footer closes a page, so following content belongs to the next page."""
+    match = _PAGE_FOOTER_RE.search(text)
+    return int(match.group(1)) + 1 if match else current
 
 
 def _extract_pdf_text(pdf_path: Path) -> str:
@@ -100,11 +124,7 @@ def _normalize_block_text(lines: list[str]) -> str:
     cleaned: list[str] = []
     for line in lines:
         text = line.strip()
-        if not text:
-            continue
-        if _PAGE_RE.match(text):
-            continue
-        if text == "ADO User Story Export":
+        if not text or _is_noise_line(text):
             continue
         cleaned.append(text)
     return " ".join(cleaned).strip()
@@ -112,10 +132,26 @@ def _normalize_block_text(lines: list[str]) -> str:
 
 def _extract_user_story_id(*texts: str) -> str | None:
     for text in texts:
-        match = _USER_STORY_ID_RE.search(text)
-        if match:
-            return f"US-{int(match.group(1)):07d}"
+        for pattern in (_USER_STORY_ID_RE, _AZURE_WI_ID_RE):
+            match = pattern.search(text)
+            if match:
+                return f"US-{int(match.group(1)):07d}"
     return None
+
+
+def _is_cross_reference_stub(item: dict) -> bool:
+    """True for ADO placeholder entries that only point at another work item.
+
+    The export lists some stories twice: once in full, once as a bare
+    ``please refer to User Story 2258111: FW Encryption`` (or a ``/edit/<id>`` URL in the
+    acceptance criteria). The placeholder is the only carrier of the work-item id.
+    """
+    description = item.get("description", "").strip()
+    if _STUB_RE.match(description):
+        return True
+    if not description:
+        return any(_STUB_RE.match(line.strip()) for line in item.get("acceptance_criteria", []))
+    return False
 
 
 def _parse_user_stories(text: str, source: Path, story_ids: list[str] | None = None) -> list[dict]:
@@ -124,14 +160,24 @@ def _parse_user_stories(text: str, source: Path, story_ids: list[str] | None = N
     i = 0
     rid = 1
     story_index = 0
+    page = 1
+    source_rel = str(source).replace("\\", "/")
 
     while i < len(lines):
-        match = _USER_STORY_HEADER_RE.match(lines[i].strip())
+        current = lines[i].strip()
+
+        if _is_noise_line(current):
+            page = _advance_page(current, page)
+            i += 1
+            continue
+
+        match = _USER_STORY_HEADER_RE.match(current)
         if not match:
             i += 1
             continue
 
         title = match.group(1).strip()
+        story_page = page
         i += 1
         description_lines: list[str] = []
         acceptance_lines: list[str] = []
@@ -139,6 +185,10 @@ def _parse_user_stories(text: str, source: Path, story_ids: list[str] | None = N
 
         while i < len(lines):
             current = lines[i].strip()
+            if _is_noise_line(current):
+                page = _advance_page(current, page)
+                i += 1
+                continue
             if _USER_STORY_HEADER_RE.match(current):
                 break
             if current == "Description:":
@@ -147,12 +197,6 @@ def _parse_user_stories(text: str, source: Path, story_ids: list[str] | None = N
                 continue
             if current == "Acceptance Criteria:":
                 section = "acceptance"
-                i += 1
-                continue
-            if current.startswith("Page ") and current.endswith(" of 38"):
-                i += 1
-                continue
-            if current == "ADO User Story Export":
                 i += 1
                 continue
 
@@ -164,9 +208,11 @@ def _parse_user_stories(text: str, source: Path, story_ids: list[str] | None = N
 
         description = _normalize_block_text(description_lines)
         acceptance_criteria = [line.strip() for line in acceptance_lines if line.strip()]
-        user_story_id = story_ids[story_index] if story_ids and story_index < len(story_ids) else None
-        if not user_story_id:
-            user_story_id = _extract_user_story_id(title, description, *acceptance_criteria)
+        # Prefer the id stated in the story text: positional matching against pdftohtml
+        # links also counts table-of-contents links, which shifts every index.
+        user_story_id = _extract_user_story_id(title, description, *acceptance_criteria)
+        if not user_story_id and story_ids and story_index < len(story_ids):
+            user_story_id = story_ids[story_index]
         story_index += 1
         requirements.append(
             {
@@ -175,11 +221,60 @@ def _parse_user_stories(text: str, source: Path, story_ids: list[str] | None = N
                 "description": description,
                 "acceptance_criteria": acceptance_criteria,
                 "user_story_id": user_story_id,
+                "source": source_rel,
+                "page": story_page,
             }
         )
         rid += 1
 
-    return requirements
+    return _merge_cross_reference_stubs(_drop_footer_echoes(requirements))
+
+
+def _merge_cross_reference_stubs(requirements: list[dict]) -> list[dict]:
+    """Fold ``please refer to`` placeholders into the story they point at.
+
+    Keeps the work-item id (and nothing else) from the placeholder. A placeholder whose
+    story is absent from this export is kept, since it is the only record of that need.
+    """
+    real_by_title: dict[str, dict] = {}
+    for item in requirements:
+        if not _is_cross_reference_stub(item):
+            real_by_title.setdefault(item["title"], item)
+
+    kept: list[dict] = []
+    for item in requirements:
+        if not _is_cross_reference_stub(item):
+            kept.append(item)
+            continue
+
+        target = real_by_title.get(item["title"])
+        if target is None:
+            kept.append(item)
+            continue
+        if item["user_story_id"] and not target["user_story_id"]:
+            target["user_story_id"] = item["user_story_id"]
+
+    for index, item in enumerate(kept, 1):
+        item["req_id"] = f"R-{index:03d}"
+    return kept
+
+
+def _drop_footer_echoes(requirements: list[dict]) -> list[dict]:
+    """Drop entries that only echo the previous story title without any content."""
+    kept: list[dict] = []
+    for item in requirements:
+        if (
+            kept
+            and item["title"] == kept[-1]["title"]
+            and not item["description"]
+            and not item["acceptance_criteria"]
+        ):
+            continue
+        kept.append(item)
+
+    for index, item in enumerate(kept, 1):
+        item["req_id"] = f"R-{index:03d}"
+    return kept
 
 
 def _discover_prd_sources(prd_dir: Path) -> list[Path]:
@@ -219,6 +314,8 @@ def ingest_prd(docs_root: Path) -> Path:
                         "description": item,
                         "acceptance_criteria": [],
                         "user_story_id": _extract_user_story_id(item),
+                        "source": str(source).replace("\\", "/"),
+                        "page": None,
                     }
                 )
                 rid += 1
