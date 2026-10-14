@@ -4,9 +4,12 @@
 
 ## 内容
 
-- `firmware-agent-dev-plan.md`：主开发计划书（已同步副本）
+- `epi-dev-plan-and-log.md`：**当前执行计划 + 工作日志（唯一进度入口，先看这个）**
+- `firmware-agent-dev-plan.md`：主开发计划书（已同步副本，目标态；与执行计划的差异以执行计划为准）
 - `epi-dev-slices-overview.md`：全量开发切片 + 总体架构大图 + 依赖关系
 - `epi-risk-register.md`：按切片风险登记与缓解策略
+- `epi-llm-workflow-standard.md`：LLM 使用标准流（作用域 / 用前用中用后 / 字源唯一货币）
+- `worklog-2026-10-13.md`：单日工作笔记（后续日志并入 `epi-dev-plan-and-log.md` §7）
 
 ## 约定
 
