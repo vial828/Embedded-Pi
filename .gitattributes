@@ -1,3 +1,3 @@
-
-# pi 会话存档必须逐字节一致，禁止换行符转换
-agent-design/sessions/*.jsonl -text
+# pi 会话存档必须逐字节一致，禁止任何换行符转换（-text = 双向都不转换）。
+# 会话记录随仓库在自有机器间同步，见 .pi/settings.json 的 sessionDir。
+.pi/sessions/**/*.jsonl -text linguist-generated=true
