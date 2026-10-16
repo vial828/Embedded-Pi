@@ -1,0 +1,6 @@
+{
+  "mmd": "epi-dev-slices-overview.mmd",
+  "out": "epi-dev-slices-graph.html",
+  "rules": "tools/graph-rules.json",
+  "title": "EPI 切片依赖图"
+}

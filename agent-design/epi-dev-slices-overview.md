@@ -8,10 +8,13 @@
 flowchart LR
 
   %% ── 图例（不参与数据流，配色见文件末尾样式块）──
+  %% @legend Legend   声明式排除：转换工具据此跳过图例子图
+  %% 判据只有一问：这条边搬的是内容，还是决策？
   subgraph Legend[图例 Legend]
     direction LR
-    LGS[开发依赖] --> LGE[产物是下游输入：system-design.md / schema / req节点]
-    LRS[运行时依赖] -.-> LRE[执行期信号：编译信号 / 重试反馈 / 上下文回写]
+    LGS[数据流] --> LGE[搬内容：下游消费它，不改变下一步做谁]
+    LRS[工作流] -.-> LRE[搬决策：下游因它被触发或改变走向]
+    LPU[待定] -.->| ？示例 | LPE[既是内容又是决策，尚未裁定，勿据此推导开发顺序]
   end
   style Legend fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.2px,stroke-dasharray:4 3
 
@@ -76,104 +79,95 @@ flowchart LR
   end
 
   %% 开发依赖（实线）
-  S01 -->|CLI契约| S02
-  S02 -->|config.yaml| S03
-  S02 -->|模板骨架| S04
-  S04 -->|system-design.md| S05
-  S05 -->|sections| S06
-  S06 -->|schema| S07
+  S01 -->| CLI契约| S02
+  S02 -->| config.yaml| S03
+  S02 -->| 模板骨架| S04
+  S04 -->| system-design.md| S05
+  S05 -->| sections| S06
+  S06 -->| schema| S07
 
-  S02 -->|STANDARDS入口| S08
-  S02 -->|PRD入口| S09
-  S02 -->|REGS入口| S10
-  S09 -->|req节点| S11
-  S10 -->|reg节点| S11
+  S02 -->| Docs布局| S08
+  S02 -->| Docs布局| S09
+  S02 -->| Docs布局| S10
+  S09 -->| req节点| S11
+  S10 -->| reg节点| S11
 
-  S12 -->|片段| S13
-  S13 -->|约束/决策| S14
-  S08 -->|rules| S15
-  S09 -->|req_index| S15
-  S10 -->|reg_index| S15
-  S11 -->|artifact_graph| S15
-  S14 -->|candidate| S15
-  S13 -->|long base| S16
-  S15 -->|promotion| S16
-  S12 -->|working| S17
-  S16 -->|pack| S17
+  S12 -->| 片段| S13
+  S13 -->| 约束/决策| S14
+  S08 -->| rules| S15
+  S09 -->| req_index| S15
+  S10 -->| reg_index| S15
+  S11 -->| artifact_graph| S15
+  S14 -->| candidate| S15
+  S13 -->| long base| S16
+  S15 -.->| ？promotion| S16
+  S12 -->| working| S17
+  S16 -->| pack| S17
 
 
-  S03 -->|配置| S18
-  S18 -->|任务序列| S19
-  S19 -->|phase/task| S20
-  S19 -->|调度| S21
-  S21 -->|产物| S22
-  S22 -->|编译结果| S23
-  S22 -->|工件| S24
-  S22 -->|错误流| S25
-  S23 -->|静态告警| S25
-  S24 -->|仿真结果| S25
-  S25 -->|分类标签| S26
+  S03 -->| 配置| S18
+  S18 -->| 任务序列| S19
+  S19 -.->| ？phase/task| S20
+  S19 -.->| 调度| S21
+  S21 -->| 产物| S22
+  S22 -->| 编译结果| S23
+  S22 -->| 工件| S24
+  S22 -->| 错误流| S25
+  S23 -->| 静态告警| S25
+  S24 -->| 仿真结果| S25
+  S25 -->| 分类标签| S26
 
-  S19 -->|追踪| S27
-  S13 -->|决策| S28
-  S22 -->|编译| S29
-  S23 -->|静态| S29
-  S24 -->|仿真| S29
-  S27 -->|证据| S30
-  S28 -->|证据| S30
-  S29 -->|证据| S30
-  S30 -->|判定| S31
+  S19 -.->| ？追踪| S27
+  S13 -->| 决策| S28
+  S22 -->| 编译结果| S29
+  S23 -->| 静态结果| S29
+  S24 -->| 仿真结果| S29
+  S27 -->| 证据| S30
+  S28 -->| 证据| S30
+  S29 -->| 证据| S30
+  S30 -.->| ？判定| S31
 
   %% 运行时依赖（虚线，橙色）
-  S17 -.->|上一轮上下文回写| S12
-  S15 -.->|晋升写入事件| S13
-  S20 -.->|LLM候选提名| S14
-  S14 -.->|候选待裁决队列| S15
-  S19 -.->|当前task查询| S16
-  S19 -.->|当前phase/task| S17
-  S17 -.->|上下文输入| S18
-  S26 -.->|重试反馈| S19
-  S17 -.->|context pack| S20
-  S20 -.->|工具调用计划| S21
-  S21 -.->|执行产物流| S22
-  S22 -.->|编译信号| S23
-  S22 -.->|编译信号| S24
-  S22 -.->|编译信号| S25
-  S23 -.->|静态信号| S25
-  S24 -.->|仿真信号| S25
-  S25 -.->|分类结果流| S26
-  S21 -.->|执行记录| S27
-  S22 -.->|编译记录| S27
-  S23 -.->|静态记录| S27
-  S24 -.->|仿真记录| S27
-  S19 -.->|状态转移事件| S28
-  S22 -.->|编译结果流| S29
-  S23 -.->|静态结果流| S29
-  S24 -.->|仿真结果流| S29
-  S29 -.->|实时门禁输入| S30
-  S30 -.->|门禁结果输入| S31
+  S17 -.->| ？上一轮上下文回写| S12
+  S15 -.->| 晋升写入事件| S13
+  S20 -->| 候选提名| S14
+  S19 -.->| 当前task查询| S16
+  S19 -->| 当前phase/task| S17
+  S17 -->| 上下文输入| S18
+  S26 -.->| 重试反馈| S19
+  S17 -.->| ？context pack| S20
+  S20 -.->| 工具调用计划| S21
+  S22 -.->| 编译信号| S23
+  S22 -.->| 编译信号| S24
+  S22 -.->| 编译信号| S25
+  S23 -.->| 静态信号| S25
+  S24 -.->| 仿真信号| S25
+  S21 -->| 执行记录| S27
+  S22 -->| 编译记录| S27
+  S23 -->| 静态记录| S27
+  S24 -->| 仿真记录| S27
+  S19 -.->| 状态转移事件| S28
 
-  IN_TOOL -->|env| S03
-  IN_PRD -->|约束| S04
-  IN_BSP -->|边界| S04
-  IN_HW -->|硬件| S04
-  IN_STD -->|标准| S04
-  IN_STD -->|source| S08
-  IN_PRD -->|source| S09
-  IN_HW -->|source| S10
-  IN_PRD -->|req| S11
-  IN_HW -->|reg| S11
-  IN_PRD -->|task语义| S18
-  IN_TOOL -->|仿真环境| S24
-  IN_TOOL -->|CI环境| S31
+  IN_TOOL -->| env| S03
+  IN_PRD -->| 约束| S04
+  IN_BSP -->| 边界| S04
+  IN_HW -->| 硬件| S04
+  IN_STD -->| 标准| S04
+  IN_STD -->| source| S08
+  IN_PRD -->| source| S09
+  IN_HW -->| source| S10
+  IN_PRD -->| req| S11
+  IN_HW -->| reg| S11
+  IN_PRD -->| task语义| S18
+  IN_TOOL -->| 仿真环境| S24
+  IN_TOOL -->| CI环境| S31
 
-
-  %% 样式：实线=开发依赖(蓝 #2563EB)；虚线=运行时依赖(橙 #F97316)
-  %% 本块按 link 声明顺序程序化生成；改图后必须重新生成，勿手改索引
+  %% 样式：颜色由 tools/apply_edge_style.py 依 graph-rules.json 生成，勿手改
+  %% 实线=数据流；虚线=工作流；虚线且标签含 ？ =待定。改箭头后重跑本脚本
   linkStyle default stroke:#2563EB,stroke-width:2.2px
   linkStyle 0 stroke:#2563EB,stroke-width:2.2px
   linkStyle 1 stroke:#F97316,stroke-width:2.2px
-  linkStyle 2 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 2 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
   linkStyle 3 stroke:#2563EB,stroke-width:2.2px
   linkStyle 4 stroke:#2563EB,stroke-width:2.2px
   linkStyle 5 stroke:#2563EB,stroke-width:2.2px
@@ -193,13 +187,13 @@ flowchart LR
   linkStyle 19 stroke:#2563EB,stroke-width:2.2px
   linkStyle 20 stroke:#2563EB,stroke-width:2.2px
   linkStyle 21 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 22 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 22 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
   linkStyle 23 stroke:#2563EB,stroke-width:2.2px
   linkStyle 24 stroke:#2563EB,stroke-width:2.2px
   linkStyle 25 stroke:#2563EB,stroke-width:2.2px
   linkStyle 26 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 27 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 28 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 27 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
+  linkStyle 28 stroke:#F97316,stroke-width:2.2px
   linkStyle 29 stroke:#2563EB,stroke-width:2.2px
   linkStyle 30 stroke:#2563EB,stroke-width:2.2px
   linkStyle 31 stroke:#2563EB,stroke-width:2.2px
@@ -207,7 +201,7 @@ flowchart LR
   linkStyle 33 stroke:#2563EB,stroke-width:2.2px
   linkStyle 34 stroke:#2563EB,stroke-width:2.2px
   linkStyle 35 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 36 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 36 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
   linkStyle 37 stroke:#2563EB,stroke-width:2.2px
   linkStyle 38 stroke:#2563EB,stroke-width:2.2px
   linkStyle 39 stroke:#2563EB,stroke-width:2.2px
@@ -215,58 +209,93 @@ flowchart LR
   linkStyle 41 stroke:#2563EB,stroke-width:2.2px
   linkStyle 42 stroke:#2563EB,stroke-width:2.2px
   linkStyle 43 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 44 stroke:#F97316,stroke-width:2.2px
-  linkStyle 45 stroke:#F97316,stroke-width:2.2px
+  linkStyle 44 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
+  linkStyle 45 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
   linkStyle 46 stroke:#F97316,stroke-width:2.2px
-  linkStyle 47 stroke:#F97316,stroke-width:2.2px
+  linkStyle 47 stroke:#2563EB,stroke-width:2.2px
   linkStyle 48 stroke:#F97316,stroke-width:2.2px
-  linkStyle 49 stroke:#F97316,stroke-width:2.2px
-  linkStyle 50 stroke:#F97316,stroke-width:2.2px
+  linkStyle 49 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 50 stroke:#2563EB,stroke-width:2.2px
   linkStyle 51 stroke:#F97316,stroke-width:2.2px
-  linkStyle 52 stroke:#F97316,stroke-width:2.2px
+  linkStyle 52 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
   linkStyle 53 stroke:#F97316,stroke-width:2.2px
   linkStyle 54 stroke:#F97316,stroke-width:2.2px
   linkStyle 55 stroke:#F97316,stroke-width:2.2px
   linkStyle 56 stroke:#F97316,stroke-width:2.2px
   linkStyle 57 stroke:#F97316,stroke-width:2.2px
   linkStyle 58 stroke:#F97316,stroke-width:2.2px
-  linkStyle 59 stroke:#F97316,stroke-width:2.2px
-  linkStyle 60 stroke:#F97316,stroke-width:2.2px
-  linkStyle 61 stroke:#F97316,stroke-width:2.2px
-  linkStyle 62 stroke:#F97316,stroke-width:2.2px
+  linkStyle 59 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 60 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 61 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 62 stroke:#2563EB,stroke-width:2.2px
   linkStyle 63 stroke:#F97316,stroke-width:2.2px
-  linkStyle 64 stroke:#F97316,stroke-width:2.2px
-  linkStyle 65 stroke:#F97316,stroke-width:2.2px
-  linkStyle 66 stroke:#F97316,stroke-width:2.2px
-  linkStyle 67 stroke:#F97316,stroke-width:2.2px
-  linkStyle 68 stroke:#F97316,stroke-width:2.2px
-  linkStyle 69 stroke:#F97316,stroke-width:2.2px
-  linkStyle 70 stroke:#F97316,stroke-width:2.2px
+  linkStyle 64 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 65 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 66 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 67 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 68 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 69 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 70 stroke:#2563EB,stroke-width:2.2px
   linkStyle 71 stroke:#2563EB,stroke-width:2.2px
   linkStyle 72 stroke:#2563EB,stroke-width:2.2px
   linkStyle 73 stroke:#2563EB,stroke-width:2.2px
   linkStyle 74 stroke:#2563EB,stroke-width:2.2px
   linkStyle 75 stroke:#2563EB,stroke-width:2.2px
   linkStyle 76 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 77 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 78 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 79 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 80 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 81 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 82 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 83 stroke:#2563EB,stroke-width:2.2px
 ```
 
 ### 1.1 线条图例
 
-| 线型 | 颜色 | 含义 | 判据 |
+**判据只有一问：这条边搬的是内容，还是决策？**
+
+| 线型 | 颜色 | 类 | 含义 |
 |---|---|---|---|
-| **实线** | 蓝 `#2563EB` | **开发依赖**：上游产物是下游输入（`system-design.md`、`schema`、`req节点`…），**决定开发顺序** | 对应 §2 表格「开发依赖」列 |
-| **虚线** | 橙 `#F97316` | **运行时依赖**：执行期的信号与反馈（`编译信号`、`重试反馈`、`上下文回写`…），**不决定开发顺序** | 对应 §2 表格「运行时依赖」列 |
+| **实线** | 蓝 `#2563EB` | 数据流 | **搬内容**：下游消费它，不改变"下一步做谁" |
+| **虚线** | 橙 `#F97316` | 工作流 | **搬决策**：下游因它被触发或改变走向 |
+| **虚线** | 紫 `#A855F7` | 待定 `？` | 既是内容又是决策，**尚未裁定，勿据此推导开发顺序** |
 
-外部输入（`PRD / BSP / HW / STANDARDS / TOOLCHAIN`）注入切片属于开发依赖，画实线。
+当前 74 条边：数据流 57 / 工作流 11 / 待定 6。
 
-配色按 link 声明顺序程序化生成，不手写索引；`tests/test_slices_overview.py` 在索引错位、漏配色、`.md` 与 `.mmd` 不同步时失败。
+### 1.2 开发顺序不在图里，由数据流推导
+
+开发依赖是**派生量**，不是原始事实，所以不画、不手写，用脚本算：
+
+```
+python tools/derive_dev_order.py
+```
+
+公式：**开发顺序 = 数据流图缩点后的拓扑序**。工作流边不参与排序 —— 反馈回路本就该成环，把它们算进去会得出「S12–S26 必须同时开工」这种废话。
+
+数据流图当前**只有一个环：`S17 → S18 → S19 → S17`**，即 agent 回路本身（上下文 → 任务序列 → 状态机 → 当前 phase 回写上下文）。这三片必须一起设计或先钉接口。该环已在 `tests/test_slices_overview.py` 里声明为唯一合法数据环；**出现新的数据环即测试失败**，因为那意味着有人把决策塞进了数据管道。
+
+### 1.3 待定边（需架构裁定）
+
+| 边 | 为什么两难 |
+|---|---|
+| `S17 ？上一轮上下文回写 S12` | 内容是数据，但它决定数据流图是否有环 |
+| `S17 ？context pack S20` | 是内容，但决定模型看到什么 = 决定行为 |
+| `S19 ？phase/task S20` | phase/task 是内容，调用 LLM 是控制，目前一条边扛两件事 |
+| `S19 ？追踪 S27` | 追踪规格是内容，触发记录是控制 |
+| `S15 ？promotion S16` | 晋升结果是内容，但改变后续召回范围 |
+| `S30 ？判定 S31` | 判定结果既是产物又是闸门 |
+
+裁定方式：**只改箭头和 `？`**——实线=数据流，虚线=工作流，虚线且标签含 `？`=待定。改完跑 `tools/apply_edge_style.py`，配色自动跟随。
+
+### 1.4 工具链
+
+图的可编辑表示只有 `.mmd`，其余全是派生产物。
+
+| 命令 | 作用 |
+|---|---|
+| `python tools/apply_edge_style.py <mmd> <md>` | 按箭头规则重生成配色块，并把 `.mmd` 同步进 `.md`。幂等 |
+| `python tools/gen_interactive_graph.py` | 生成可交互 HTML（点节点看上下游，方向/深度/类别可筛） |
+| `python tools/derive_dev_order.py` | 由数据流推导开发顺序，并列出数据环 |
+| `python tools/sync_diagram_md.py <mmd> <md> --check` | 只检查 `.md` 内嵌图是否落后于 `.mmd` |
+| `pytest tests/test_slices_overview.py` | 不变量守门，含交互图是否过期 |
+
+**语义规则集中在 `tools/graph-rules.json`**：颜色 ↔ 关系类别 ↔ 是否参与开发排序。加一类关系只改这个 JSON，代码不动。
+
+改图流程：编辑 `.mmd` 的节点与箭头 → `apply_edge_style.py` → `gen_interactive_graph.py` → `pytest`。
 
 ---
 

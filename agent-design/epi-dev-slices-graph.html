@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EPI 切片依赖图（交互）</title>
+<!-- 由 tools/gen_interactive_graph.py 从 epi-dev-slices-overview.mmd 生成，勿手改 -->
+<style>
+ body{margin:0;font:13px/1.5 system-ui,'Segoe UI',sans-serif;background:#F8FAFC;color:#0F172A}
+ #bar{position:fixed;top:0;left:0;right:0;background:#fff;border-bottom:1px solid #E2E8F0
+      padding:8px 12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;z-index:2}
+ #bar label{cursor:pointer;user-select:none}
+ button{border:1px solid #CBD5E1;background:#fff;border-radius:6px;padding:3px 9px;cursor:pointer}
+ button.on{background:#0F172A;color:#fff;border-color:#0F172A}
+ .sw{display:inline-block;width:22px;border-top-width:3px;vertical-align:middle;margin-right:4px}
+ #hint{color:#64748B}
+ #info{position:fixed;right:12px;top:56px;width:300px;background:#fff;border:1px solid #E2E8F0
+      border-radius:8px;padding:10px 12px;display:none;z-index:2;box-shadow:0 2px 8px #0F172A14}
+ #info h3{margin:0 0 6px;font-size:14px} #info table{width:100%;border-collapse:collapse;font-size:12px}
+ #info td{padding:2px 0;vertical-align:top;word-break:break-all}
+ #info td.k{color:#64748B;width:66px;white-space:nowrap}
+ #warn{margin-top:6px;color:#B45309}
+ #lg{margin-top:8px;color:#94A3B8;font-size:11px}
+ svg{display:block;cursor:grab} .dim{opacity:.07} .lbl{font-size:10px;fill:#475569}
+ .node text{font-size:12px;font-weight:600;fill:#0F172A;pointer-events:none}
+ .node{cursor:pointer} .lv{fill:#94A3B8;font-size:11px;font-weight:700}
+</style></head><body>
+<div id=bar>
+  <b>EPI 切片依赖图</b>
+  <span>方向</span>
+  <button data-d=both class=on>上下游</button><button data-d=down>下游</button><button data-d=up>上游</button>
+  <span>深度</span>
+  <button data-k=1>1</button><button data-k=2>2</button><button data-k=99 class=on>全部</button>
+  <span>类别</span><span id=filters></span>
+  <button id=reset>重置</button>
+  <span id=hint>点节点聚焦 · 拖拽平移 · 滚轮缩放 · Esc 取消</span>
+</div>
+<div id=info></div>
+<svg id=svg></svg>
+<script>
+const D = {"title": "EPI 切片依赖图", "nodes": [{"id": "IN_BSP", "x": 0, "y": 0, "level": 0, "label": "BSP", "name": "BSP", "extra": {}, "loop": false}, {"id": "IN_HW", "x": 0, "y": 1, "level": 0, "label": "HW: SCH/DATASHEET/REGS/PIN_MAP", "name": "HW: SCH/DATASHEET/REGS/PIN_MAP", "extra": {}, "loop": false}, {"id": "IN_PRD", "x": 0, "y": 2, "level": 0, "label": "PRD", "name": "PRD", "extra": {}, "loop": false}, {"id": "IN_STD", "x": 0, "y": 3, "level": 0, "label": "STANDARDS", "name": "STANDARDS", "extra": {}, "loop": false}, {"id": "IN_TOOL", "x": 0, "y": 4, "level": 0, "label": "TOOLCHAIN/ENV", "name": "TOOLCHAIN/ENV", "extra": {}, "loop": false}, {"id": "S01", "x": 0, "y": 5, "level": 0, "label": "S01 CLI入口", "name": "CLI入口与命令模型", "extra": {"output": "`epi` 命令入口"}, "loop": false}, {"id": "S02", "x": 1, "y": 2, "level": 1, "label": "S02 布局/模板", "name": "项目布局与模板生成", "extra": {"output": "Docs 目录树 + 模板文件"}, "loop": false}, {"id": "S03", "x": 2, "y": 8, "level": 2, "label": "S03 配置校验", "name": "配置加载与校验", "extra": {"output": "`config` 模块"}, "loop": false}, {"id": "S04", "x": 2, "y": 0, "level": 2, "label": "S04 SD模板生成", "name": "SYSTEM-DESIGN 生成", "extra": {"output": "完整 `system-design.md`"}, "loop": false}, {"id": "S05", "x": 3, "y": 0, "level": 3, "label": "S05 parser", "name": "parser", "extra": {"output": "section/kv/table/mermaid 解析"}, "loop": false}, {"id": "S06", "x": 4, "y": 0, "level": 4, "label": "S06 validator", "name": "validator", "extra": {"output": "严格规则校验"}, "loop": false}, {"id": "S07", "x": 5, "y": 0, "level": 5, "label": "S07 compiler", "name": "compiler", "extra": {"output": "编译输出 JSON"}, "loop": false}, {"id": "S08", "x": 2, "y": 4, "level": 2, "label": "S08 STANDARDS", "name": "STANDARDS ingestion", "extra": {"output": "`knowledge/rules.json`"}, "loop": false}, {"id": "S09", "x": 2, "y": 6, "level": 2, "label": "S09 PRD", "name": "PRD ingestion", "extra": {"output": "`requirements_index.json`"}, "loop": false}, {"id": "S10", "x": 2, "y": 7, "level": 2, "label": "S10 REGS", "name": "REGS ingestion", "extra": {"output": "`register_index.json`"}, "loop": false}, {"id": "S11", "x": 3, "y": 4, "level": 3, "label": "S11 artifact_graph", "name": "artifact_graph", "extra": {"output": "`artifact_graph.json`"}, "loop": false}, {"id": "S12", "x": 0, "y": 6, "level": 0, "label": "S12 短记忆", "name": "短记忆", "extra": {"output": "`working_memory.json`"}, "loop": false}, {"id": "S13", "x": 1, "y": 3, "level": 1, "label": "S13 长记忆", "name": "长记忆", "extra": {"output": "`long_memory.json`"}, "loop": false}, {"id": "S14", "x": 2, "y": 5, "level": 2, "label": "S14 候选记忆", "name": "候选记忆", "extra": {"output": "`candidate_memory.json`"}, "loop": false}, {"id": "S15", "x": 4, "y": 3, "level": 4, "label": "S15 晋升规则", "name": "晋升规则引擎", "extra": {"output": "promotion 模块"}, "loop": false}, {"id": "S16", "x": 2, "y": 9, "level": 2, "label": "S16 任务召回", "name": "召回策略", "extra": {"output": "memory pack"}, "loop": false}, {"id": "S17", "x": 3, "y": 6, "level": 3, "label": "S17 Context", "name": "ContextAssembler", "extra": {"output": "上下文组装器"}, "loop": true}, {"id": "S18", "x": 3, "y": 5, "level": 3, "label": "S18 Planner", "name": "TaskPlanner", "extra": {"output": "任务列表生成"}, "loop": true}, {"id": "S19", "x": 3, "y": 7, "level": 3, "label": "S19 State", "name": "StateMachine", "extra": {"output": "主循环与状态流转"}, "loop": true}, {"id": "S20", "x": 0, "y": 7, "level": 0, "label": "S20 LLM/Tools", "name": "LLMClient+Tools", "extra": {"output": "模型与工具调用"}, "loop": false}, {"id": "S21", "x": 0, "y": 8, "level": 0, "label": "S21 Executor", "name": "Executor", "extra": {"output": "文件与动作执行"}, "loop": false}, {"id": "S22", "x": 1, "y": 1, "level": 1, "label": "S22 编译验证", "name": "Compiler Verifier", "extra": {"output": "编译验证"}, "loop": false}, {"id": "S23", "x": 2, "y": 2, "level": 2, "label": "S23 静态验证", "name": "Static Verifier", "extra": {"output": "静态分析"}, "loop": false}, {"id": "S24", "x": 2, "y": 3, "level": 2, "label": "S24 仿真验证", "name": "Simulator Verifier", "extra": {"output": "仿真验证"}, "loop": false}, {"id": "S25", "x": 3, "y": 3, "level": 3, "label": "S25 错误分类", "name": "Error Classifier", "extra": {"output": "错误分类器"}, "loop": false}, {"id": "S26", "x": 4, "y": 2, "level": 4, "label": "S26 重试策略", "name": "Retry Strategy", "extra": {"output": "重试策略引擎"}, "loop": false}, {"id": "S27", "x": 3, "y": 1, "level": 3, "label": "S27 Traceability", "name": "Traceability 输出", "extra": {"output": "traceability 文档"}, "loop": false}, {"id": "S28", "x": 2, "y": 1, "level": 2, "label": "S28 Decision Log", "name": "Decision Log 输出", "extra": {"output": "design_decisions 文档"}, "loop": false}, {"id": "S29", "x": 3, "y": 2, "level": 3, "label": "S29 Test Report", "name": "Test Report 输出", "extra": {"output": "test_report 文档"}, "loop": false}, {"id": "S30", "x": 4, "y": 1, "level": 4, "label": "S30 Quality Gates", "name": "Quality Gates", "extra": {"output": "门禁策略"}, "loop": false}, {"id": "S31", "x": 1, "y": 0, "level": 1, "label": "S31 CI矩阵", "name": "CI矩阵", "extra": {"output": "Win/Linux CI"}, "loop": false}], "edges": [{"s": "S01", "t": "S02", "label": "CLI契约", "kind": "data"}, {"s": "S02", "t": "S03", "label": "config.yaml", "kind": "data"}, {"s": "S02", "t": "S04", "label": "模板骨架", "kind": "data"}, {"s": "S04", "t": "S05", "label": "system-design.md", "kind": "data"}, {"s": "S05", "t": "S06", "label": "sections", "kind": "data"}, {"s": "S06", "t": "S07", "label": "schema", "kind": "data"}, {"s": "S02", "t": "S08", "label": "Docs布局", "kind": "data"}, {"s": "S02", "t": "S09", "label": "Docs布局", "kind": "data"}, {"s": "S02", "t": "S10", "label": "Docs布局", "kind": "data"}, {"s": "S09", "t": "S11", "label": "req节点", "kind": "data"}, {"s": "S10", "t": "S11", "label": "reg节点", "kind": "data"}, {"s": "S12", "t": "S13", "label": "片段", "kind": "data"}, {"s": "S13", "t": "S14", "label": "约束/决策", "kind": "data"}, {"s": "S08", "t": "S15", "label": "rules", "kind": "data"}, {"s": "S09", "t": "S15", "label": "req_index", "kind": "data"}, {"s": "S10", "t": "S15", "label": "reg_index", "kind": "data"}, {"s": "S11", "t": "S15", "label": "artifact_graph", "kind": "data"}, {"s": "S14", "t": "S15", "label": "candidate", "kind": "data"}, {"s": "S13", "t": "S16", "label": "long base", "kind": "data"}, {"s": "S15", "t": "S16", "label": "？promotion", "kind": "open"}, {"s": "S12", "t": "S17", "label": "working", "kind": "data"}, {"s": "S16", "t": "S17", "label": "pack", "kind": "data"}, {"s": "S03", "t": "S18", "label": "配置", "kind": "data"}, {"s": "S18", "t": "S19", "label": "任务序列", "kind": "data"}, {"s": "S19", "t": "S20", "label": "？phase/task", "kind": "open"}, {"s": "S19", "t": "S21", "label": "调度", "kind": "flow"}, {"s": "S21", "t": "S22", "label": "产物", "kind": "data"}, {"s": "S22", "t": "S23", "label": "编译结果", "kind": "data"}, {"s": "S22", "t": "S24", "label": "工件", "kind": "data"}, {"s": "S22", "t": "S25", "label": "错误流", "kind": "data"}, {"s": "S23", "t": "S25", "label": "静态告警", "kind": "data"}, {"s": "S24", "t": "S25", "label": "仿真结果", "kind": "data"}, {"s": "S25", "t": "S26", "label": "分类标签", "kind": "data"}, {"s": "S19", "t": "S27", "label": "？追踪", "kind": "open"}, {"s": "S13", "t": "S28", "label": "决策", "kind": "data"}, {"s": "S22", "t": "S29", "label": "编译结果", "kind": "data"}, {"s": "S23", "t": "S29", "label": "静态结果", "kind": "data"}, {"s": "S24", "t": "S29", "label": "仿真结果", "kind": "data"}, {"s": "S27", "t": "S30", "label": "证据", "kind": "data"}, {"s": "S28", "t": "S30", "label": "证据", "kind": "data"}, {"s": "S29", "t": "S30", "label": "证据", "kind": "data"}, {"s": "S30", "t": "S31", "label": "？判定", "kind": "open"}, {"s": "S17", "t": "S12", "label": "？上一轮上下文回写", "kind": "open"}, {"s": "S15", "t": "S13", "label": "晋升写入事件", "kind": "flow"}, {"s": "S20", "t": "S14", "label": "候选提名", "kind": "data"}, {"s": "S19", "t": "S16", "label": "当前task查询", "kind": "flow"}, {"s": "S19", "t": "S17", "label": "当前phase/task", "kind": "data"}, {"s": "S17", "t": "S18", "label": "上下文输入", "kind": "data"}, {"s": "S26", "t": "S19", "label": "重试反馈", "kind": "flow"}, {"s": "S17", "t": "S20", "label": "？context pack", "kind": "open"}, {"s": "S20", "t": "S21", "label": "工具调用计划", "kind": "flow"}, {"s": "S22", "t": "S23", "label": "编译信号", "kind": "flow"}, {"s": "S22", "t": "S24", "label": "编译信号", "kind": "flow"}, {"s": "S22", "t": "S25", "label": "编译信号", "kind": "flow"}, {"s": "S23", "t": "S25", "label": "静态信号", "kind": "flow"}, {"s": "S24", "t": "S25", "label": "仿真信号", "kind": "flow"}, {"s": "S21", "t": "S27", "label": "执行记录", "kind": "data"}, {"s": "S22", "t": "S27", "label": "编译记录", "kind": "data"}, {"s": "S23", "t": "S27", "label": "静态记录", "kind": "data"}, {"s": "S24", "t": "S27", "label": "仿真记录", "kind": "data"}, {"s": "S19", "t": "S28", "label": "状态转移事件", "kind": "flow"}, {"s": "IN_TOOL", "t": "S03", "label": "env", "kind": "data"}, {"s": "IN_PRD", "t": "S04", "label": "约束", "kind": "data"}, {"s": "IN_BSP", "t": "S04", "label": "边界", "kind": "data"}, {"s": "IN_HW", "t": "S04", "label": "硬件", "kind": "data"}, {"s": "IN_STD", "t": "S04", "label": "标准", "kind": "data"}, {"s": "IN_STD", "t": "S08", "label": "source", "kind": "data"}, {"s": "IN_PRD", "t": "S09", "label": "source", "kind": "data"}, {"s": "IN_HW", "t": "S10", "label": "source", "kind": "data"}, {"s": "IN_PRD", "t": "S11", "label": "req", "kind": "data"}, {"s": "IN_HW", "t": "S11", "label": "reg", "kind": "data"}, {"s": "IN_PRD", "t": "S18", "label": "task语义", "kind": "data"}, {"s": "IN_TOOL", "t": "S24", "label": "仿真环境", "kind": "data"}, {"s": "IN_TOOL", "t": "S31", "label": "CI环境", "kind": "data"}], "legend": [{"kind": "data", "title": "数据流", "desc": "搬内容：下游消费它，不改变下一步做谁", "stroke": "#2563eb", "dash": false}, {"kind": "flow", "title": "工作流", "desc": "搬决策：下游因它被触发或改变走向", "stroke": "#f97316", "dash": true}, {"kind": "open", "title": "待定", "desc": "既是内容又是决策，勿据此推导开发顺序", "stroke": "#a855f7", "dash": true}], "colours": {"data": "#2563eb", "flow": "#f97316", "open": "#a855f7"}, "dashed": {"data": false, "flow": true, "open": true}, "layout": {"level_spacing": 250, "row_spacing": 66, "node_width": 152, "node_height": 42, "sweeps": 4}};
+const L = D.layout, SX=L.level_spacing||250, SY=L.row_spacing||66, W=L.node_width||152, H=L.node_height||42;
+const COL=D.colours, DASH=D.dashed;
+let dir='both', depth=99, on={}, focus=null, tx=70, ty=80, sc=1;
+D.legend.forEach(l=>on[l.kind]=1);
+const svg=document.getElementById('svg'), NS='http://www.w3.org/2000/svg';
+const byId=Object.fromEntries(D.nodes.map(n=>[n.id,n]));
+const out={}, inn={};
+D.edges.forEach(e=>{(out[e.s]=out[e.s]||[]).push(e);(inn[e.t]=inn[e.t]||[]).push(e);});
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+document.getElementById('filters').innerHTML = D.legend.map(l=>
+  `<label><input type=checkbox data-c=${l.kind} checked>
+   <span class=sw style="border-top:3px ${l.dash?'dashed':'solid'} ${l.stroke}"></span>${esc(l.title)}</label>`).join(' ');
+document.querySelectorAll('[data-c]').forEach(b=>b.onchange=()=>{on[b.dataset.c]=b.checked?1:0;draw();});
+
+// 'both' walks the graph undirected: a feedback edge still means a real relation.
+function reach(start, direction, limit){
+  const seen={[start]:0}, q=[[start,0]];
+  limit = limit===undefined ? depth : limit;
+  while(q.length){
+    const [n,d]=q.shift(); if(d>=limit) continue;
+    const cand=[];
+    if(direction!=='up')   for(const e of (out[n]||[])) cand.push([e.t,e]);
+    if(direction!=='down') for(const e of (inn[n]||[])) cand.push([e.s,e]);
+    for(const [m,e] of cand){
+      if(!on[e.kind]) continue;
+      if(seen[m]===undefined){seen[m]=d+1;q.push([m,d+1]);}
+    }
+  }
+  return seen;
+}
+const el=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const hop=(set,f)=>Object.keys(set).filter(x=>set[x]===f&&x!==focus).sort().join(' ')||'—';
+
+function draw(){
+  svg.innerHTML='';
+  const g=el('g',{transform:`translate(${tx},${ty}) scale(${sc})`}); svg.appendChild(g);
+  const keep = focus ? reach(focus, dir) : null;
+  const maxLv=Math.max(...D.nodes.map(n=>n.level));
+  for(let l=0;l<=maxLv;l++)
+    g.appendChild(el('text',{x:l*SX,y:-20,class:'lv'})).textContent='L'+l;
+
+  D.edges.forEach(e=>{
+    if(!on[e.kind]) return;
+    const a=byId[e.s], b=byId[e.t]; if(!a||!b) return;
+    const vis = !keep || (keep[e.s]!==undefined && keep[e.t]!==undefined);
+    const x1=a.x*SX+W, y1=a.y*SY+H/2, x2=b.x*SX, y2=b.y*SY+H/2;
+    const mx=(x1+x2)/2 + (b.x<=a.x ? 70 : 0);
+    g.appendChild(el('path',{class:'edge'+(vis?'':' dim'),
+      d:`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`,fill:'none',
+      stroke:COL[e.kind],'stroke-width':e.kind==='open'?3:1.8,
+      'marker-end':`url(#a${e.kind})`,'stroke-dasharray':DASH[e.kind]?'7 4':''}));
+    const t=el('text',{class:'lbl'+(vis?'':' dim'),x:mx,y:(y1+y2)/2-4,'text-anchor':'middle'});
+    t.textContent=e.label; g.appendChild(t);
+  });
+
+  D.nodes.forEach(n=>{
+    const dim = keep && keep[n.id]===undefined;
+    const gg=el('g',{class:'node'+(dim?' dim':''),transform:`translate(${n.x*SX},${n.y*SY})`});
+    gg.appendChild(el('rect',{width:W,height:H,rx:7,fill:focus===n.id?'#DBEAFE':'#fff',
+      stroke:n.loop?'#DC2626':'#334155','stroke-width':1.6}));
+    const t=el('text',{x:10,y:17}); t.textContent=n.id+(n.loop?' ⟳':''); gg.appendChild(t);
+    const t2=el('text',{x:10,y:31,'font-size':10,'font-weight':400,fill:'#64748B'});
+    t2.textContent=(n.name||'').slice(0,13); gg.appendChild(t2);
+    gg.onclick=ev=>{ev.stopPropagation();focus=focus===n.id?null:n.id;info();draw();};
+    g.appendChild(gg);
+  });
+
+  const defs=el('defs',{}); g.appendChild(defs);
+  for(const k in COL){
+    const m=el('marker',{id:'a'+k,viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:6,markerHeight:6,orient:'auto'});
+    m.appendChild(el('path',{d:'M0,0 L10,5 L0,10 z',fill:COL[k]})); defs.appendChild(m);
+  }
+  svg.setAttribute('width',innerWidth);
+  svg.setAttribute('height',Math.max(innerHeight-10,(Math.max(...D.nodes.map(n=>n.y))+2)*SY+140));
+}
+
+function info(){
+  const box=document.getElementById('info');
+  if(!focus){box.style.display='none';return;}
+  const n=byId[focus];
+  const up=reach(focus,'up',2), down=reach(focus,'down',2), all=reach(focus,dir);
+  const cnt={}; D.edges.forEach(e=>{if(e.s===focus||e.t===focus)cnt[e.kind]=(cnt[e.kind]||0)+1;});
+  const extras=Object.entries(n.extra||{}).map(([k,v])=>
+    `<tr><td class=k>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('');
+  box.style.display='block';
+  box.innerHTML=`<h3>${esc(focus)} ${esc(n.name||'')}</h3><table>
+   ${extras}
+   <tr><td class=k>开发层级</td><td>L${n.level}</td></tr>
+   <tr><td class=k>直连边</td><td>${D.legend.map(l=>`${esc(l.title)} ${cnt[l.kind]||0}`).join(' · ')}</td></tr>
+   <tr><td class=k>上游 1 跳</td><td>${hop(up,1)}</td></tr>
+   <tr><td class=k>上游 2 跳</td><td>${hop(up,2)}</td></tr>
+   <tr><td class=k>下游 1 跳</td><td>${hop(down,1)}</td></tr>
+   <tr><td class=k>下游 2 跳</td><td>${hop(down,2)}</td></tr>
+   <tr><td class=k>聚焦合计</td><td>${Object.keys(all).length-1} 个节点</td></tr>
+   </table>
+   ${n.loop?'<div id=warn>⟳ 在数据环内，须与同环节点一起设计或先钉接口</div>':''}
+   <div id=lg>${D.legend.map(l=>`<span class=sw style="border-top:3px ${l.dash?'dashed':'solid'} ${l.stroke}"></span>${esc(l.desc)}`).join('<br>')}</div>`;
+}
+
+document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{dir=b.dataset.d;
+  document.querySelectorAll('[data-d]').forEach(x=>x.classList.toggle('on',x===b));draw();});
+document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{depth=+b.dataset.k;
+  document.querySelectorAll('[data-k]').forEach(x=>x.classList.toggle('on',x===b));draw();});
+document.getElementById('reset').onclick=()=>{focus=null;tx=70;ty=80;sc=1;info();draw();};
+svg.addEventListener('click',()=>{if(focus){focus=null;info();draw();}});
+addEventListener('keydown',e=>{if(e.key==='Escape'&&focus){focus=null;info();draw();}});
+let drag=null;
+svg.onmousedown=e=>{drag=[e.clientX-tx,e.clientY-ty];svg.style.cursor='grabbing';};
+addEventListener('mouseup',()=>{drag=null;svg.style.cursor='grab';});
+addEventListener('mousemove',e=>{if(drag){tx=e.clientX-drag[0];ty=e.clientY-drag[1];draw();}});
+svg.addEventListener('wheel',e=>{e.preventDefault();sc=Math.min(2.5,Math.max(.3,sc*(e.deltaY<0?1.12:.9)));draw();},{passive:false});
+addEventListener('resize',draw);
+draw();
+</script></body></html>

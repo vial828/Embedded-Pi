@@ -1,0 +1,54 @@
+{
+  "_comment": "语义规则：把标准 Mermaid 的视觉特征（描边色 + 虚线）映射成关系类别。改语义改这里，不改代码。",
+  "palette": [
+    {
+      "stroke": "#2563eb",
+      "dash": false,
+      "class": "data",
+      "title": "数据流",
+      "desc": "搬内容：下游消费它，不改变下一步做谁",
+      "ordering": true
+    },
+    {
+      "stroke": "#f97316",
+      "dash": true,
+      "class": "flow",
+      "title": "工作流",
+      "desc": "搬决策：下游因它被触发或改变走向",
+      "ordering": false
+    },
+    {
+      "stroke": "#a855f7",
+      "dash": true,
+      "class": "open",
+      "title": "待定",
+      "desc": "既是内容又是决策，勿据此推导开发顺序",
+      "ordering": false,
+      "warn": true
+    }
+  ],
+  "unknown": {
+    "class": "unknown",
+    "title": "未分类",
+    "stroke": "#94a3b8",
+    "dash": false,
+    "desc": "配色不在 palette 里，必须先在规则中登记",
+    "ordering": false,
+    "reject": true
+  },
+  "layout": {
+    "level_spacing": 250,
+    "row_spacing": 66,
+    "node_width": 152,
+    "node_height": 42,
+    "sweeps": 4
+  },
+  "node_info": {
+    "md": "epi-dev-slices-overview.md",
+    "key_column": "Slice",
+    "columns": {
+      "名称": "name",
+      "目标产物": "output"
+    }
+  }
+}
