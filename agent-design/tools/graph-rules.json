@@ -37,7 +37,7 @@
     "reject": true
   },
   "layout": {
-    "level_spacing": 250,
+    "level_spacing": 360,
     "row_spacing": 66,
     "node_width": 152,
     "node_height": 42,

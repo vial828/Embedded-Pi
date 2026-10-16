@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import mermaid_doc  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-CHAR_W = 6.2          # rough glyph width for label collision maths
+CHAR_W = 5.9          # rough glyph width for label collision maths
 LABEL_H = 12.0
 
 
@@ -270,6 +270,150 @@ def order_layers(layers, chains, sweeps):
     return pos
 
 
+def lane_route(edges, level_of, x_of, y_of, w, sx, out_y, in_y):
+    """Route forward edges through per-gap lanes.
+
+    Without lanes every long edge crosses a column gap on the same vertical, so
+    six of them stack into one bundle and their labels sit on top of the lines.
+    Each gap is divided into as many lanes as there are crossings, ordered by
+    height, which spreads the bundle and frees space for the labels.
+    """
+    gap_w = max(40.0, sx - w)
+    crossings = collections.defaultdict(list)
+    for idx, e in enumerate(edges):
+        la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
+        if la >= lb:
+            continue
+        for g in range(la, lb):
+            y = in_y[idx] if g == lb - 1 else (y_of[("d", (idx, g + 1))]
+                                               if (idx, g + 1) in y_of else out_y[idx])
+            crossings[g].append((y, idx))
+    lane_x = {}
+    for g, rows in crossings.items():
+        rows.sort()
+        n = len(rows)
+        for k, (_y, idx) in enumerate(rows):
+            lane_x[(g, idx)] = x_of[g] + w + gap_w * (k + 1) / (n + 1)
+
+    geo = {}
+    for idx, e in enumerate(edges):
+        la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
+        if la < lb:
+            pts = [(x_of[la] + w, out_y[idx])]
+            for g in range(la, lb):
+                y = in_y[idx] if g == lb - 1 else y_of.get(("d", (idx, g + 1)), in_y[idx])
+                pts.append((lane_x[(g, idx)], y))
+            pts.append((x_of[lb], in_y[idx]))
+            geo[idx] = pts
+    return geo
+
+
+def segments_of(polys):
+    segs = []
+    for pts in polys.values():
+        for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+            segs.append((x1, y1, x2, y2))
+    return segs
+
+
+def _seg(a, b):
+    return (a[0], a[1], b[0], b[1])
+
+
+def _boxed(seg):
+    """Append the segment bounding box so overlap tests can reject cheaply."""
+    x1, y1, x2, y2 = seg
+    return seg + (min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2))
+
+
+def _box_covers(x, y, hw, hh, seg, pad=0.0):
+    """Does the polyline segment pass through the label box?
+
+    seg may carry a cached bounding box as its last four entries, which is what
+    keeps label placement out of quadratic time.
+    """
+    if len(seg) == 8:
+        bx1, by1, bx2, by2 = seg[4:]
+        if bx2 < x - hw - pad or bx1 > x + hw + pad or by2 < y - hh - pad or by1 > y + hh + pad:
+            return False
+    x1, y1, x2, y2 = seg[:4]
+    steps = max(2, int((abs(x2 - x1) + abs(y2 - y1)) / 4) + 1)
+    for i in range(steps + 1):
+        t = i / steps
+        if abs(x1 + (x2 - x1) * t - x) <= hw + pad and abs(y1 + (y2 - y1) * t - y) <= hh + pad:
+            return True
+    return False
+
+
+def _poly_at(pts, t):
+    total = 0.0
+    lens = []
+    for a, b in zip(pts, pts[1:]):
+        length = abs(b[0] - a[0]) + abs(b[1] - a[1])
+        lens.append(length)
+        total += length
+    if total == 0:
+        return pts[0]
+    want, acc = t * total, 0.0
+    for (a, b), length in zip(zip(pts, pts[1:]), lens):
+        if acc + length >= want:
+            k = (want - acc) / length if length else 0
+            return (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k)
+        acc += length
+    return pts[-1]
+
+
+def place_labels_on_own_edge(labels, segs, rects):
+    """每个标签只许压在自己那条边上，并且不得碰到别的边。
+
+    segs 是 (owner, segment)。代价：压到别人的线 = 重罚；没压到自己的线 = 次重罚；
+    压住节点或与别的标签重叠 = 禁止；离自己的边中点越远越差。
+    """
+    hh = LABEL_H / 2
+    placed = []
+    for lab in labels:
+        own = lab["pts"]
+        cands = []
+        for t in [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7][:9]:
+            x, y = _poly_at(own, t)
+            for dx in (0, 20, -20, 40, -40, 60, -60):
+                for dy in (0, -7, 7, -14, 14, -22, 22):
+                    cands.append((x + dx, y + dy, t))
+        scored = []
+        for cx, cy, t in cands:
+            if scored and scored[0][0] <= abs(t - 0.5) * 6:
+                break          # 已经找到按序第一个零冲突位置，后面只会更差
+            hw = lab["w"] / 2
+            on_own = any(_box_covers(cx, cy, hw, hh, _seg(a, b))
+                         for a, b in zip(own, own[1:]))
+            cost = 0
+            if not on_own:
+                cost += 400                      # 必须压住自己的边
+            hits_other = 0
+            for owner, seg in segs:
+                if owner == lab["idx"]:
+                    continue
+                if _box_covers(cx, cy, hw, hh, seg, pad=1.0):
+                    hits_other += 1
+                    cost += 1000
+                    break                        # 绝不允许压到别人的边
+            for rx, ry, rw, rh in rects:
+                if abs(cx - rx) < hw + rw / 2 and abs(cy - ry) < hh + rh / 2:
+                    cost += 5000
+            for q in placed:
+                if abs(cx - q["lx"]) < hw + q["w"] / 2 + 4 and abs(cy - q["ly"]) < LABEL_H:
+                    cost += 5000
+            cost += abs(t - 0.5) * 6
+            scored.append((cost, cx, cy, hits_other, on_own))
+        scored.sort(key=lambda r: (r[0], r[1], r[2]))
+        cost, cx, cy, hits_other, on_own = scored[0]
+        lab["lx"], lab["ly"] = cx, cy
+        lab["on_own"] = bool(on_own)
+        lab["cross_others"] = hits_other
+        placed.append(lab)
+    return labels
+
+
 def label_geometry(labels):
     """Push labels apart so no two overlap. Deterministic, and unit-testable."""
     placed = []
@@ -390,35 +534,36 @@ def build(config_path):
         if level_of.get(e["src"], 0) >= level_of.get(e["dst"], 0):
             back_lanes[idx] = len(back_lanes)
 
-    geo, labels = {}, []
-    for idx, e in enumerate(edges):
-        a, b = e["src"], e["dst"]
-        la, lb = level_of.get(a, 0), level_of.get(b, 0)
-        ya = slot_y(a, idx, out_slots[a], False)
-        yb = slot_y(b, idx, in_slots[b], True)
-        if la < lb:
-            pts = [(x_of[la] + w, ya)]
-            for l in range(la + 1, lb):
-                pts.append((x_of[l] - 16, y_of[("d", (idx, l))]))
-            pts.append((x_of[lb], yb))
-        else:
-            lane = back_lanes[idx] % 5
-            bulge = 60 + lane * 16
-            midx = (x_of[la] + x_of[lb] + w) / 2
-            pts = [(x_of[la] + w / 2, ya - h / 2 - 6),
-                   (midx, min(ya, yb) - bulge), (x_of[lb] + w / 2, yb - h / 2 - 6)]
-        geo[idx] = pts
-        # label anchor: midpoint of the longest segment
-        best_seg, best_len = pts[:2], -1
-        for p, q in zip(pts, pts[1:]):
-            length = abs(q[0] - p[0]) + abs(q[1] - p[1])
-            if length > best_len:
-                best_len, best_seg = length, (p, q)
-        labels.append({"for": f"{a}->{b}", "lx": (best_seg[0][0] + best_seg[1][0]) / 2,
-                       "ly": (best_seg[0][1] + best_seg[1][1]) / 2,
-                       "w": max(24.0, len(e["label"]) * CHAR_W)})
+    out_y = {idx: slot_y(e["src"], idx, out_slots[e["src"]], False) for idx, e in enumerate(edges)}
+    in_y = {idx: slot_y(e["dst"], idx, in_slots[e["dst"]], True) for idx, e in enumerate(edges)}
+    geo = lane_route(edges, level_of, x_of, y_of, w, sx, out_y, in_y)
 
-    labels = label_geometry(labels)
+    # 反向边与同列边：端点必须落在节点框边上，不能悬在顶边外面
+    for idx, e in enumerate(edges):
+        if idx in geo:
+            continue
+        la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
+        ya, yb = out_y[idx], in_y[idx]
+        lane = back_lanes[idx] % 6
+        if la == lb:                       # 同列：从右侧绕出去再回来
+            x = x_of[la] + w + 22 + lane * 11
+            geo[idx] = [(x_of[la] + w, ya), (x, (ya + yb) / 2), (x_of[lb] + w, yb)]
+        else:                              # 真反向：源左出、目标右入，走列间通道
+            lo, hi = x_of[lb] + w, x_of[la]
+            geo[idx] = [(x_of[la], ya),
+                        (lo + (hi - lo) * (lane + 1) / 7.0, (ya + yb) / 2),
+                        (x_of[lb] + w, yb)]
+
+    segs = [(owner, _boxed(_seg(a, b))) for owner, pts in geo.items()
+            for a, b in zip(pts, pts[1:])]
+    rects = [(x_of[level_of.get(n, 0)] + w / 2, y_of[("n", n)] - h / 2, w, h) for n in ids]
+    labels = []
+    for idx, e in enumerate(edges):
+        labels.append({"for": f"{e['src']}->{e['dst']}", "idx": idx, "pts": geo[idx],
+                       "w": max(24.0, len(e["label"]) * CHAR_W),
+                       "ax": _poly_at(geo[idx], 0.5)[0], "ay": _poly_at(geo[idx], 0.5)[1],
+                       "lx": 0.0, "ly": 0.0})
+    labels = place_labels_on_own_edge(labels, segs, rects)
     label_of = {lab["for"]: lab for lab in labels}
 
     spec = rules.get("node_info") or {}
@@ -460,11 +605,14 @@ def build(config_path):
         "sx": sx,
         "canvas": {"w": (max(level_of.values(), default=0) + 1) * sx + 120,
                    "h": (height + 1) * sy + 160},
-        "labels": [{"for": l["for"], "lx": round(l["lx"], 1), "ly": round(l["ly"], 1),
-                    "w": round(l["w"], 1)} for l in labels],
+        "labels": [{"for": l["for"], "idx": l["idx"], "lx": round(l["lx"], 1),
+                    "ly": round(l["ly"], 1), "w": round(l["w"], 1),
+                    "on_own": l["on_own"], "cross_others": l["cross_others"]} for l in labels],
         "stats": {"crossings": getattr(order_layers, "crossings", -1),
                   "labels": len(labels),
-                  "label_overlaps": len(overlaps(labels))},
+                  "label_overlaps": len(overlaps(labels)),
+                  "labels_off_own_edge": sum(1 for l in labels if not l["on_own"]),
+                  "labels_crossing_others": sum(1 for l in labels if l["cross_others"])},
     }
 
 

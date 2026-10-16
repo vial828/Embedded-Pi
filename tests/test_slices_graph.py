@@ -142,6 +142,32 @@ def test_every_edge_has_geometry_and_label_slot(built):
     assert all("lx" in e and "ly" in e for e in built["edges"])
 
 
+def _gap(pt, n):
+    """点到节点矩形边缘的距离，0 表示端点正好贴在框上。"""
+    dx = max(n["x"] - pt[0], 0, pt[0] - (n["x"] + n["w"]))
+    dy = max(n["y"] - pt[1], 0, pt[1] - (n["y"] + n["h"]))
+    return (dx * dx + dy * dy) ** 0.5
+
+
+def test_edge_endpoints_touch_their_nodes(built):
+    """曾经反向边挂在节点顶边外 6px，看起来两端都错位。"""
+    nodes = {n["id"]: n for n in built["nodes"]}
+    loose = [(e["kind"], f"{e['s']}->{e['t']}", round(_gap(e["pts"][0], nodes[e["s"]]), 1),
+              round(_gap(e["pts"][-1], nodes[e["t"]]), 1))
+             for e in built["edges"]
+             if _gap(e["pts"][0], nodes[e["s"]]) > 1 or _gap(e["pts"][-1], nodes[e["t"]]) > 1]
+    assert not loose, f"{len(loose)} 条边端点悬空，例如 {loose[:4]}"
+
+
+def test_labels_sit_on_their_own_edge_only(built):
+    """标签可以压自己的边，一条都不能压到别人的边。"""
+    cross = [l["for"] for l in built["labels"] if l["cross_others"]]
+    assert not cross, f"{len(cross)} 个标签压到了别的边：{cross[:6]}"
+    off = [l["for"] for l in built["labels"] if not l["on_own"]]
+    assert len(off) <= 4, f"{len(off)} 个标签没能落在自己的边上：{off[:6]}"
+    assert built["stats"]["labels_crossing_others"] == 0
+
+
 def test_nodes_carry_a_description(built):
     """节点说明框要有功能描述；外部输入没有 WBS 条目，允许为空但必须显式存在。"""
     for n in built["nodes"]:

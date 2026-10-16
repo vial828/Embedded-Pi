@@ -4,7 +4,8 @@
 <title>__TITLE__（交互）</title>
 <!-- 由 tools/gen_interactive_graph.py 从 __SOURCE__ 生成，勿手改 -->
 <style>
- body{margin:0;font:13px/1.5 system-ui,'Segoe UI',sans-serif;background:#F8FAFC;color:#0F172A}
+ body{margin:0;font:13px/1.5 system-ui,'Segoe UI',sans-serif;background:#F8FAFC;color:#0F172A;
+      user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
  #bar{position:fixed;top:0;left:0;right:0;background:#fff;border-bottom:1px solid #E2E8F0
       padding:8px 12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;z-index:3}
  #bar label{cursor:pointer;user-select:none}
@@ -13,7 +14,7 @@
  .sw{display:inline-block;width:22px;border-top-width:3px;vertical-align:middle;margin-right:4px}
  #hint{color:#64748B}
  .panel{position:fixed;background:#fff;border:1px solid #E2E8F0;border-radius:8px;
-        box-shadow:0 2px 8px #0F172A14;z-index:3}
+        box-shadow:0 2px 8px #0F172A14;z-index:3;user-select:text;-webkit-user-select:text}
  #info{right:12px;top:56px;width:316px;padding:10px 12px;display:none;
        max-height:calc(100vh - 300px);overflow:auto}
  #info h3{margin:0 0 4px;font-size:14px}
@@ -29,7 +30,8 @@
             display:flex;justify-content:space-between}
  #legend .row{margin:3px 0}
  #legend .meta{margin-top:6px;padding-top:6px;border-top:1px dashed #E2E8F0;color:#94A3B8}
- svg{display:block;cursor:grab}
+ svg{display:block;cursor:grab;user-select:none;-webkit-user-select:none;
+     -webkit-touch-callout:none;touch-action:none}
  .dim{opacity:.06} .soft{opacity:.45}
  .lbl{font-size:10.5px;fill:#334155;paint-order:stroke;stroke:#F8FAFC;stroke-width:3.5px;
       stroke-linejoin:round;pointer-events:none}
@@ -224,8 +226,11 @@ document.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { state.dep
   document.querySelectorAll('[data-k]').forEach(x => x.classList.toggle('on', x === b)); draw(); });
 document.getElementById('reset').onclick = () => { state.focus = null; tx = 40; ty = 60; sc = 1; info(); draw(); };
 svg.addEventListener('click', () => { if(state.focus){ state.focus = null; info(); draw(); } });
+document.addEventListener('selectstart', e => { if(!e.target.closest('.panel')) e.preventDefault(); });
+document.addEventListener('mousedown', e => { if(!e.target.closest('.panel')) e.preventDefault(); });
 addEventListener('keydown', e => { if(e.key === 'Escape' && state.focus){ state.focus = null; info(); draw(); } });
-svg.onmousedown = e => { drag = [e.clientX - tx, e.clientY - ty]; svg.style.cursor = 'grabbing'; };
+svg.onmousedown = e => { e.preventDefault(); if(window.getSelection) getSelection().removeAllRanges();
+  drag = [e.clientX - tx, e.clientY - ty]; svg.style.cursor = 'grabbing'; };
 addEventListener('mouseup', () => { drag = null; svg.style.cursor = 'grab'; });
 addEventListener('mousemove', e => { if(drag){ tx = e.clientX - drag[0]; ty = e.clientY - drag[1]; draw(); } });
 svg.addEventListener('wheel', e => { e.preventDefault(); sc = Math.min(2.5, Math.max(.25, sc * (e.deltaY < 0 ? 1.12 : .9))); draw(); }, {passive:false});
