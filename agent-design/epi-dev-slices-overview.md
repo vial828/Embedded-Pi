@@ -288,14 +288,22 @@ python tools/derive_dev_order.py
 | 命令 | 作用 |
 |---|---|
 | `python tools/apply_edge_style.py <mmd> <md>` | 按箭头规则重生成配色块，并把 `.mmd` 同步进 `.md`。幂等 |
-| `python tools/gen_interactive_graph.py` | 生成可交互 HTML（点节点看上下游，方向/深度/类别可筛） |
+| `python tools/gen_interactive_graph.py` | 生成可交互 HTML（`--check` 查过期，`--open` 直接打开） |
 | `python tools/derive_dev_order.py` | 由数据流推导开发顺序，并列出数据环 |
 | `python tools/sync_diagram_md.py <mmd> <md> --check` | 只检查 `.md` 内嵌图是否落后于 `.mmd` |
-| `pytest tests/test_slices_overview.py` | 不变量守门，含交互图是否过期 |
+| `pytest tests/test_slices_overview.py tests/test_slices_graph.py` | 不变量守门 |
 
-**语义规则集中在 `tools/graph-rules.json`**：颜色 ↔ 关系类别 ↔ 是否参与开发排序。加一类关系只改这个 JSON，代码不动。
+**语义规则集中在 `tools/graph-rules.json`**：颜色 ↔ 关系类别 ↔ 是否参与开发排序 ↔ 哪一列是节点功能描述。加一类关系或换描述列只改这个 JSON，代码不动。页面模板在 `tools/graph_template.html`。
 
 改图流程：编辑 `.mmd` 的节点与箭头 → `apply_edge_style.py` → `gen_interactive_graph.py` → `pytest`。
+
+### 1.5 交互图的聚焦语义
+
+聚焦一个节点时，**只沿主关系（数据流）传递 N 跳**，构成以它为中心的 ego 网络；范围内的边全部显示，范围外一律不亮。工作流与待定边**不参与传递**，只在 ego 网络内部或与聚焦节点直连时出现。
+
+原因：本图有一个 15 节点的强连通回路。若按“任意边可达”定义下游，`S26 → 重试反馈 → S19` 会把整个记忆子系统算成 S22 的下游，聚焦一个节点点亮大半张图 —— 那不是下游，是可达性爆炸。
+
+节点说明框显示该片的**功能描述**（取自 WBS 表「目标产物」列）与验收标准；线型含义常驻右下角大图说明框，不随节点弹出。
 
 ---
 

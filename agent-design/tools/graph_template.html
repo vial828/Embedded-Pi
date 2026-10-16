@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__（交互）</title>
+<!-- 由 tools/gen_interactive_graph.py 从 __SOURCE__ 生成，勿手改 -->
+<style>
+ body{margin:0;font:13px/1.5 system-ui,'Segoe UI',sans-serif;background:#F8FAFC;color:#0F172A}
+ #bar{position:fixed;top:0;left:0;right:0;background:#fff;border-bottom:1px solid #E2E8F0
+      padding:8px 12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;z-index:3}
+ #bar label{cursor:pointer;user-select:none}
+ button{border:1px solid #CBD5E1;background:#fff;border-radius:6px;padding:3px 9px;cursor:pointer}
+ button.on{background:#0F172A;color:#fff;border-color:#0F172A}
+ .sw{display:inline-block;width:22px;border-top-width:3px;vertical-align:middle;margin-right:4px}
+ #hint{color:#64748B}
+ .panel{position:fixed;background:#fff;border:1px solid #E2E8F0;border-radius:8px;
+        box-shadow:0 2px 8px #0F172A14;z-index:3}
+ #info{right:12px;top:56px;width:316px;padding:10px 12px;display:none;
+       max-height:calc(100vh - 300px);overflow:auto}
+ #info h3{margin:0 0 4px;font-size:14px}
+ #info p{margin:0 0 8px;font-size:12px;color:#334155;background:#F1F5F9;
+         border-left:3px solid #94A3B8;padding:6px 8px;border-radius:0 6px 6px 0;
+         word-break:break-all;white-space:normal}
+ #info table{width:100%;border-collapse:collapse;font-size:12px}
+ #info td{padding:2px 0;vertical-align:top;word-break:break-all}
+ #info td.k{color:#64748B;width:64px;white-space:nowrap}
+ #warn{margin-top:6px;color:#B45309}
+ #legend{right:12px;bottom:12px;width:316px;padding:8px 12px;font-size:11.5px;color:#475569}
+ #legend h4{margin:0 0 6px;font-size:12px;color:#0F172A;cursor:pointer;
+            display:flex;justify-content:space-between}
+ #legend .row{margin:3px 0}
+ #legend .meta{margin-top:6px;padding-top:6px;border-top:1px dashed #E2E8F0;color:#94A3B8}
+ svg{display:block;cursor:grab}
+ .dim{opacity:.06} .soft{opacity:.45}
+ .lbl{font-size:10.5px;fill:#334155;paint-order:stroke;stroke:#F8FAFC;stroke-width:3.5px;
+      stroke-linejoin:round;pointer-events:none}
+ .node text{font-size:12px;font-weight:600;fill:#0F172A;pointer-events:none}
+ .node{cursor:pointer} .lv{fill:#94A3B8;font-size:11px;font-weight:700}
+</style></head><body>
+<div id=bar>
+  <b>__TITLE__</b>
+  <span>方向</span>
+  <button data-d=both class=on>上下游</button><button data-d=down>下游</button><button data-d=up>上游</button>
+  <span>深度</span>
+  <button data-k=1>1</button><button data-k=2>2</button><button data-k=99 class=on>全部</button>
+  <span>类别</span><span id=filters></span>
+  <label><input type=checkbox id=lbls checked> 边标签</label>
+  <button id=reset>重置</button>
+  <span id=hint>点节点聚焦 · 拖拽平移 · 滚轮缩放 · Esc 取消</span>
+</div>
+<div id=info class=panel></div>
+<div id=legend class=panel>
+  <h4>大图说明 <span id=lgtog>收起 −</span></h4>
+  <div id=lgbody></div>
+</div>
+<svg id=svg></svg>
+<script>
+const D = __DATA__;
+const BX = D.box, COL = D.colours, DASH = D.dashed;
+/*LOGIC-START*/
+// 纯计算，不碰 DOM：测试会把这段取出来直接跑
+const state = {dir:'both', depth:99, focus:null, showLbl:true, on:{}};
+D.legend.forEach(l => state.on[l.kind] = 1);
+const out = {}, inn = {};
+D.edges.forEach(e => {(out[e.s] = out[e.s] || []).push(e); (inn[e.t] = inn[e.t] || []).push(e);});
+
+// 传递只沿主关系（默认=数据流）走。原因：本图有一个 15 节点的大回路，
+// 若按“任意边可达”算下游，S26->S19 这类反馈边会把整个记忆子系统拖进
+// “S22 的下游”，于是聚焦一个节点点亮大半张图 —— 那不是下游，是可达性爆炸。
+// 工作流/待定边不参与传递，只在聚焦子图内部显示，外加与聚焦节点直连的那些。
+function reach(start, direction){
+  const seen = {[start]:0}, q = [[start,0]];
+  while(q.length){
+    const [n, d] = q.shift();
+    if(d >= state.depth) continue;
+    for(const e of (direction === 'up' ? inn[n] : out[n]) || []){
+      if(!state.on[e.kind] || !D.primary.includes(e.kind)) continue;
+      const m = direction === 'up' ? e.s : e.t;
+      if(seen[m] === undefined){ seen[m] = d + 1; q.push([m, d+1]); }
+    }
+  }
+  return seen;
+}
+// 聚焦范围 = 以该节点为中心的 ego 网络：沿主关系走 depth 跳，
+// 范围内节点之间的边（含工作流/待定）一并显示，范围外一律不亮。
+// 为什么不按“任意边可达”算：本图有一个 15 节点大回路，S26->S19 这类反馈边
+// 会把整个记忆子系统拖成“S22 的下游”，聚焦一个点亮大半张图。
+function visibleEdges(){
+  if(!state.focus) return null;
+  const f = state.focus, d = state.dir;
+  const down = d === 'up' ? {} : reach(f, 'down');
+  const up = d === 'down' ? {} : reach(f, 'up');
+  const dist = {[f]: 0};
+  const put = (n, v) => { if(dist[n] === undefined || dist[n] > v) dist[n] = v; };
+  Object.entries(down).forEach(([n, v]) => put(n, v));
+  Object.entries(up).forEach(([n, v]) => put(n, v));
+
+  const vis = new Set();
+  D.edges.forEach((e, i) => {
+    if(!state.on[e.kind]) return;
+    if(d !== 'up' && e.s === f){ vis.add(i); put(e.t, Math.min(dist[e.t] === undefined ? 1 : dist[e.t], 1)); }
+    if(d !== 'down' && e.t === f){ vis.add(i); put(e.s, Math.min(dist[e.s] === undefined ? 1 : dist[e.s], 1)); }
+  });
+  const nodes = new Set(Object.keys(dist).filter(n => dist[n] <= state.depth));
+  const inside = n => nodes.has(n);
+  D.edges.forEach((e, i) => {
+    if(!state.on[e.kind] || vis.has(i)) return;
+    if(!inside(e.s) || !inside(e.t)) return;
+    if(!D.primary.includes(e.kind)){ vis.add(i); }
+    else if(d !== 'up' && down[e.s] !== undefined){ vis.add(i); }
+    else if(d !== 'down' && up[e.t] !== undefined){ vis.add(i); }
+  });
+  return {vis, nodes};
+}
+/*LOGIC-END*/
+
+const svg = document.getElementById('svg'), NS = 'http://www.w3.org/2000/svg';
+const byId = Object.fromEntries(D.nodes.map(n => [n.id, n]));
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+let tx = 40, ty = 60, sc = 1, drag = null;
+
+document.getElementById('filters').innerHTML = D.legend.map(l =>
+  `<label><input type=checkbox data-c=${l.kind} checked>
+   <span class=sw style="border-top:3px ${l.dash?'dashed':'solid'} ${l.stroke}"></span>${esc(l.title)}</label>`).join(' ');
+document.querySelectorAll('[data-c]').forEach(b => b.onchange = () => { state.on[b.dataset.c] = b.checked?1:0; draw(); });
+document.getElementById('lbls').onchange = e => { state.showLbl = e.target.checked; draw(); };
+
+document.getElementById('lgbody').innerHTML =
+  D.legend.map(l => `<div class=row><span class=sw style="border-top:3px ${l.dash?'dashed':'solid'} ${l.stroke}"></span>${esc(l.desc)}</div>`).join('')
+  + `<div class=meta>${D.legend.map(l => esc(l.title)).join(' / ')} 共 ${D.edges.length} 条边。<br>`
+  + `横向位置 = 由数据流推导的开发层级；红框 ⟳ = 数据环。<br>`
+  + `聚焦时只沿${D.primary.join('/')}传递；工作流与待定边只在聚焦子图内显示。<br>`
+  + `${D.nodes.length} 节点 / ${D.edges.length} 边 / 边标签 ${D.stats.labels} 个（重叠 ${D.stats.label_overlaps}）</div>`;
+document.getElementById('lgtog').onclick = () => {
+  const b = document.getElementById('lgbody'), h = document.getElementById('lgtog');
+  const hide = b.style.display !== 'none';
+  b.style.display = hide ? 'none' : 'block';
+  h.textContent = hide ? '展开 +' : '收起 −';
+};
+
+const el = (t, a) => { const e = document.createElementNS(NS, t); for(const k in a) e.setAttribute(k, a[k]); return e; };
+function pathOf(pts){
+  if(pts.length < 3){
+    const [p, q] = pts, c = (p[0]+q[0])/2;
+    return `M${p[0]},${p[1]} C${c},${p[1]} ${c},${q[1]} ${q[0]},${q[1]}`;
+  }
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for(let i = 1; i < pts.length; i++){
+    const p = pts[i-1], q = pts[i], mx = (p[0]+q[0])/2;
+    d += Math.abs(q[1]-p[1]) < 1 ? ` L${q[0]},${q[1]}` : ` C${mx},${p[1]} ${mx},${q[1]} ${q[0]},${q[1]}`;
+  }
+  return d;
+}
+
+function draw(){
+  svg.innerHTML = '';
+  const g = el('g', {transform:`translate(${tx},${ty}) scale(${sc})`}); svg.appendChild(g);
+  const V = visibleEdges();
+  const maxLv = Math.max(...D.nodes.map(n => n.level));
+  for(let l = 0; l <= maxLv; l++)
+    g.appendChild(el('text', {x:l*D.sx + BX.w/2, y:18, class:'lv'})).textContent = 'L' + l;
+
+  D.edges.forEach((e, i) => {
+    if(!state.on[e.kind]) return;
+    const cls = V ? (V.vis.has(i) ? (e.back ? ' soft' : '') : ' dim') : (e.back ? ' soft' : '');
+    g.appendChild(el('path', {d:pathOf(e.pts), fill:'none', class:cls.trim(),
+      stroke:COL[e.kind], 'stroke-width':e.kind === 'open' ? 3 : 1.8,
+      'marker-end':`url(#a${e.kind})`, 'stroke-dasharray':DASH[e.kind] ? '7 4' : ''}));
+  });
+  if(state.showLbl) D.edges.forEach((e, i) => {
+    if(!state.on[e.kind] || (V && !V.vis.has(i))) return;
+    const t = el('text', {x:e.lx, y:e.ly + 3.5, 'text-anchor':'middle', class:'lbl'});
+    t.textContent = e.label; g.appendChild(t);
+  });
+
+  D.nodes.forEach(n => {
+    const dim = V && !V.nodes.has(n.id);
+    const gg = el('g', {class:'node' + (dim ? ' dim' : ''), transform:`translate(${n.x},${n.y})`});
+    gg.appendChild(el('rect', {width:n.w, height:n.h, rx:7,
+      fill:state.focus === n.id ? '#DBEAFE' : '#fff',
+      stroke:n.loop ? '#DC2626' : '#334155', 'stroke-width':1.6}));
+    const t = el('text', {x:10, y:17}); t.textContent = n.id + (n.loop ? ' ⟳' : ''); gg.appendChild(t);
+    const t2 = el('text', {x:10, y:31, 'font-size':10, 'font-weight':400, fill:'#64748B'});
+    t2.textContent = (n.name || '').slice(0, 13); gg.appendChild(t2);
+    gg.onclick = ev => { ev.stopPropagation(); state.focus = state.focus === n.id ? null : n.id; info(); draw(); };
+    g.appendChild(gg);
+  });
+
+  const defs = el('defs', {}); g.appendChild(defs);
+  for(const k in COL){
+    const m = el('marker', {id:'a'+k, viewBox:'0 0 10 10', refX:9, refY:5, markerWidth:6, markerHeight:6, orient:'auto'});
+    m.appendChild(el('path', {d:'M0,0 L10,5 L0,10 z', fill:COL[k]})); defs.appendChild(m);
+  }
+  svg.setAttribute('width', Math.max(innerWidth, D.canvas.w));
+  svg.setAttribute('height', Math.max(innerHeight, D.canvas.h));
+}
+
+function info(){
+  const box = document.getElementById('info');
+  if(!state.focus){ box.style.display = 'none'; return; }
+  const n = byId[state.focus];
+  const up = reach(state.focus, 'up'), down = reach(state.focus, 'down');
+  const cnt = {}; D.edges.forEach(e => { if(e.s === state.focus || e.t === state.focus) cnt[e.kind] = (cnt[e.kind]||0) + 1; });
+  const hop = (s, f) => Object.keys(s).filter(x => s[x] === f && x !== state.focus).sort().join(' ') || '—';
+  const direct = D.edges.filter(e => e.s === state.focus || e.t === state.focus).length;
+  const extras = (n.extra || []).map(([k, v]) => `<tr><td class=k>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('');
+  box.style.display = 'block';
+  box.innerHTML = `<h3>${esc(n.id)} ${esc(n.name || '')}</h3>
+   <p>${n.desc ? esc(n.desc) : '（无功能描述：node_info 指定的数据源里没有该节点的条目）'}</p>
+   <table>
+     <tr><td class=k>开发层级</td><td>L${n.level}</td></tr>
+     <tr><td class=k>直连边</td><td>${direct}（${D.legend.map(l => `${esc(l.title)} ${cnt[l.kind]||0}`).join(' · ')}）</td></tr>
+     <tr><td class=k>上游 1 跳</td><td>${hop(up, 1)}</td></tr>
+     <tr><td class=k>上游 2 跳</td><td>${hop(up, 2)}</td></tr>
+     <tr><td class=k>下游 1 跳</td><td>${hop(down, 1)}</td></tr>
+     <tr><td class=k>下游 2 跳</td><td>${hop(down, 2)}</td></tr>
+     <tr><td class=k>聚焦边数</td><td>${visibleEdges().vis.size} / ${D.edges.length}</td></tr>
+   </table>
+   ${n.loop ? '<div id=warn>⟳ 在数据环内，须与同环节点一起设计或先钉接口</div>' : ''}`;
+}
+
+document.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { state.dir = b.dataset.d;
+  document.querySelectorAll('[data-d]').forEach(x => x.classList.toggle('on', x === b)); draw(); });
+document.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { state.depth = +b.dataset.k;
+  document.querySelectorAll('[data-k]').forEach(x => x.classList.toggle('on', x === b)); draw(); });
+document.getElementById('reset').onclick = () => { state.focus = null; tx = 40; ty = 60; sc = 1; info(); draw(); };
+svg.addEventListener('click', () => { if(state.focus){ state.focus = null; info(); draw(); } });
+addEventListener('keydown', e => { if(e.key === 'Escape' && state.focus){ state.focus = null; info(); draw(); } });
+svg.onmousedown = e => { drag = [e.clientX - tx, e.clientY - ty]; svg.style.cursor = 'grabbing'; };
+addEventListener('mouseup', () => { drag = null; svg.style.cursor = 'grab'; });
+addEventListener('mousemove', e => { if(drag){ tx = e.clientX - drag[0]; ty = e.clientY - drag[1]; draw(); } });
+svg.addEventListener('wheel', e => { e.preventDefault(); sc = Math.min(2.5, Math.max(.25, sc * (e.deltaY < 0 ? 1.12 : .9))); draw(); }, {passive:false});
+addEventListener('resize', draw);
+draw();
+</script></body></html>

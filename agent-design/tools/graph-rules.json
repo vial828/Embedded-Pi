@@ -48,7 +48,13 @@
     "key_column": "Slice",
     "columns": {
       "名称": "name",
-      "目标产物": "output"
+      "目标产物": "output",
+      "验收标准（DoD）": "dod"
+    },
+    "description_column": "output",
+    "panel_labels": {
+      "dod": "验收标准",
+      "output": "目标产物"
     }
   }
 }
