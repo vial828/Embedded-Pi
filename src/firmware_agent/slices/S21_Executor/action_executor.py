@@ -208,6 +208,16 @@ class ActionExecutor:
 
     # ----------------------------------------------------------------- audit
 
+    def allow_executable(self, executable: str) -> None:
+        """Admit one program to an otherwise restricted task.
+
+        A caller that builds a binary and then runs it has to widen the list
+        itself; going through the executor keeps that widening visible instead of
+        relying on the caller aliasing the set it passed in.
+        """
+        if self.allowed_executables is not None:
+            self.allowed_executables.add(executable)
+
     def _resolve(self, relative_path: str, *, must_exist: bool = False) -> tuple[Path, str]:
         candidate = Path(relative_path)
         if candidate.is_absolute():

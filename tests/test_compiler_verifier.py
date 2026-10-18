@@ -66,10 +66,15 @@ def test_a_stub_can_never_report_success() -> None:
         VerifyResult(passed=True, stub=True, output="[stub] compiled")
 
 
-def test_stubs_now_mark_themselves_so_the_quality_gate_can_reject_them() -> None:
-    for stub in (StaticVerifier(), SimulatorVerifier()):
-        result = stub.verify("anything")
-        assert result.stub is True and result.passed is False
+def test_remaining_stubs_mark_themselves_so_the_quality_gate_can_reject_them() -> None:
+    result = StaticVerifier().verify("anything")
+    assert result.stub is True and result.passed is False
+
+
+def test_s24_is_no_longer_a_stub_but_still_refuses_to_guess() -> None:
+    result = SimulatorVerifier().verify("anything")
+    assert result.stub is False and result.passed is False
+    assert "no project root" in result.output
 
 
 def test_an_empty_src_is_not_a_clean_build(project: Path) -> None:

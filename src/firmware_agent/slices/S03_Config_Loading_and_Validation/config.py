@@ -98,6 +98,10 @@ class ToolchainConfig(_StrictModel):
         min_length=1,
     )
     objcopy: str | None = None
+    # Host tests cannot be built by a cross compiler, so they need their own.
+    # Optional because a target-only project has none; the moment host tests
+    # exist, S24 reports their absence instead of picking a compiler itself.
+    host_compiler: str | None = None
 
     def resolved_objcopy(self) -> str:
         """Derive objcopy from the compiler, keeping its directory.
