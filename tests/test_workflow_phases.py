@@ -128,3 +128,33 @@ def test_a_real_passing_suite_completes_the_workflow(runner: WorkflowRunner) -> 
     assert runner.state.phase == WorkflowPhase.DONE.value
     assert runner.state.test_verdicts == {"compile": "pass", "host-tests": "pass", "static-analysis": "no_evidence"}
     assert "**Overall: PASSED** (passed with unverified stages: static-analysis)" in report(runner)
+
+
+# ----------------------------------------------------------- status: evidence
+
+
+def test_status_invents_no_evidence_when_nothing_ran(runner: WorkflowRunner) -> None:
+    assert runner._evidence_lines() == [], "an absent record must render as absent, not as a clean bill"
+
+
+def test_status_shows_a_stub_as_no_evidence_not_as_a_pass(runner: WorkflowRunner) -> None:
+    runner.state.test_verdicts = {"compile": "pass", "static-analysis": "no_evidence"}
+
+    lines = runner._evidence_lines()
+
+    body = "\n".join(lines)
+    assert "static-analysis: [magenta]no evidence (stub)[/magenta]" in body
+    assert "compile: [green]pass[/green]" in body
+
+
+def test_status_refuses_certification_in_words(runner: WorkflowRunner) -> None:
+    runner.state.test_verdicts = {"compile": "pass"}
+    runner.state.quality_gate = "rejected"
+
+    assert "NOT CERTIFIED" in "\n".join(runner._evidence_lines())
+
+
+def test_status_reports_an_unjudged_gate_as_unjudged(runner: WorkflowRunner) -> None:
+    runner.state.test_verdicts = {"compile": "pass"}
+
+    assert "quality gate: not judged yet" in "\n".join(runner._evidence_lines())

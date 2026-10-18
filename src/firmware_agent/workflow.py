@@ -127,6 +127,28 @@ class WorkflowRunner:
         label = self._roadmap_lines()[self._current_stage_index()]
         return f"[bold cyan]Status[/bold cyan]  [yellow]▶[/yellow] {current}/{total}  {label}"
 
+    def _evidence_lines(self) -> list[str]:
+        """The last recorded evidence. No record renders as no record - never as a pass.
+
+        `no_evidence` gets its own word and colour: a stub that renders like a pass
+        here would undo the whole point of recording verdicts separately.
+        """
+        if not self.state.test_verdicts and not self.state.quality_gate:
+            return []
+
+        tags = {"pass": "[green]pass[/green]", "fail": "[red]fail[/red]"}
+        lines = ["[bold cyan]Evidence[/bold cyan]"]
+        for stage, verdict in self.state.test_verdicts.items():
+            lines.append(f"  {stage}: {tags.get(verdict, '[magenta]no evidence (stub)[/magenta]')}")
+
+        if self.state.quality_gate == "accepted":
+            lines.append("  [green]CERTIFIED[/green] by the quality gate")
+        elif self.state.quality_gate == "rejected":
+            lines.append("  [red]NOT CERTIFIED[/red] - see Docs/ai-generation/reports/quality_gate.json")
+        else:
+            lines.append("  [dim]quality gate: not judged yet[/dim]")
+        return lines
+
     def _show_status(self) -> None:
         console.clear()
         console.print(self._status_bar())
@@ -142,6 +164,8 @@ class WorkflowRunner:
             else:
                 marker = "[dim]·[/dim]"
             console.print(f"  {marker} {line}")
+        for line in self._evidence_lines():
+            console.print(line)
 
     def _required_sources(self) -> list[tuple[str, list[str]]]:
         return [
