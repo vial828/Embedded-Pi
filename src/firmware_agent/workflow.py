@@ -11,6 +11,13 @@ from rich.console import Console
 from firmware_agent.config import load_project_config
 from firmware_agent.slices.S07_Compiler.compiler import compile_system_design
 from firmware_agent.slices.S09_PRD_Ingestion.prd_ingestion import ingest_prd
+from firmware_agent.slices.S22_Compiler_Verifier.compiler_verifier import (
+    CompilerVerifier,
+)
+from firmware_agent.slices.S23_Static_Verifier.static_verifier import StaticVerifier
+from firmware_agent.slices.S24_Simulator_Verifier.simulator_verifier import (
+    SimulatorVerifier,
+)
 
 console = Console()
 
@@ -38,6 +45,8 @@ class WorkflowState:
     # (gate.allow_missing_inputs). A waiver nobody claims is indistinguishable
     # from a bug that skipped the gate.
     waived_by: str = ""
+    # Last test-phase verdicts, so `status` and S30 can see what evidence existed.
+    test_verdicts: dict[str, str] = field(default_factory=dict)
 
 
 class WorkflowRunner:
@@ -365,25 +374,105 @@ class WorkflowRunner:
                 continue
 
             if phase == WorkflowPhase.GENERATE:
-                design_path = self._ensure_design_template()
-                compile_system_design(self.project_dir)
-                console.print(f"[green]Generated design artifacts from:[/green] {design_path}")
-                self._advance(WorkflowPhase.TEST)
+                if not self._phase_generate():
+                    self._interactive_prompt({"retry", "quit", "status"})
                 continue
 
             if phase == WorkflowPhase.TEST:
-                report_dir = self.docs_root / "ai-generation" / "reports"
-                report_dir.mkdir(parents=True, exist_ok=True)
-                report_path = report_dir / "workflow_test_report.txt"
-                report_path.write_text("MVP workflow reached test stage.\n", encoding="utf-8")
-                console.print(f"[green]Test report written:[/green] {report_path}")
-                self._advance(WorkflowPhase.DONE)
+                if not self._phase_test():
+                    self._interactive_prompt({"retry", "quit", "status"})
                 continue
 
             if phase == WorkflowPhase.DONE:
                 console.print("[bold green]Workflow complete.[/bold green]")
                 self._show_status()
                 return
+
+    def _phase_generate(self) -> bool:
+        """Turn the reviewed design into compiled artifacts. False means it did not work.
+
+        This phase does not generate firmware. Saying so here is the point: the
+        previous message claimed it "generated" from the design, which made an
+        empty `src/` look like a completed step.
+        """
+        design_path = self._ensure_design_template()
+        ok, message = compile_system_design(self.project_dir)
+        if not ok:
+            console.print("[red]Design compile failed:[/red]")
+            console.print(message)
+            return False
+
+        console.print(f"[cyan]Design artifacts compiled from[/cyan] {design_path}")
+        console.print(f"  [dim]{message}[/dim]")
+        console.print("[yellow]No code generator is implemented yet - nothing was written under src/.[/yellow]")
+        self._advance(WorkflowPhase.TEST)
+        return True
+
+    def _phase_test(self) -> bool:
+        """Run the real verifiers and fail the phase on a real failure.
+
+        A stub is neither a pass nor a failure: it produced no evidence. It is
+        listed at the top of the report so nobody reads "0 failures" as "fully
+        verified" - the quality gate (S30) is what rejects a run on stub evidence.
+        """
+        config = self._project_config()
+        verdicts = {
+            "compile": CompilerVerifier(config, self.project_dir).verify("Workflow compile"),
+            "host-tests": SimulatorVerifier(config, self.project_dir).verify("Workflow host tests"),
+            "static-analysis": StaticVerifier().verify("Workflow static analysis"),
+        }
+        report_path = self._write_test_report(verdicts)
+
+        for name, result in verdicts.items():
+            if result.stub:
+                tag = "[magenta]no evidence (stub)[/magenta]"
+            elif result.passed:
+                tag = "[green]PASS[/green]"
+            else:
+                tag = "[red]FAIL[/red]"
+            console.print(f"  {name}: {tag}")
+
+        blocking = {name: result for name, result in verdicts.items() if not result.passed and not result.stub}
+        if blocking:
+            console.print(f"[red]Failed:[/red] {', '.join(blocking)} - see {report_path}")
+            return False
+
+        console.print(f"[green]Test report written:[/green] {report_path}")
+        self.state.test_verdicts = {name: ("stub" if r.stub else "pass") for name, r in verdicts.items()}
+        self._advance(WorkflowPhase.DONE)
+        return True
+
+    def _write_test_report(self, verdicts: dict) -> Path:
+        report_dir = self.docs_root / "ai-generation" / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report_path = report_dir / "workflow_test_report.txt"
+
+        stubs = [name for name, result in verdicts.items() if result.stub]
+        failures = [name for name, result in verdicts.items() if not result.passed and not result.stub]
+        lines = [
+            "Workflow test report",
+            "====================",
+            "",
+            f"Overall: {'FAILED' if failures else 'PASSED'}" + (" (with unverified stages)" if stubs else ""),
+            f"Failed: {', '.join(failures) or 'none'}",
+            f"No evidence (stub): {', '.join(stubs) or 'none'}",
+            "",
+        ]
+        for name, result in verdicts.items():
+            status = "NO EVIDENCE (stub)" if result.stub else ("PASS" if result.passed else "FAIL")
+            lines += [
+                f"[{name}] {status}",
+                f"  tool: {result.tool or 'n/a'}",
+                f"  duration_ms: {result.duration_ms}",
+            ]
+            for command in result.commands:
+                lines.append(f"  $ {command}")
+            if result.output:
+                lines += [f"  {line}" for line in result.output.splitlines()]
+            lines.append("")
+
+        report_path.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+        return report_path
 
     def _interactive_prompt(self, allowed: set[str]) -> None:
         while True:
@@ -392,6 +481,10 @@ class WorkflowRunner:
                 if cmd == "status":
                     self._show_status()
                     continue
+                if cmd == "retry":
+                    # Return so the caller re-enters the phase; a phase that failed
+                    # stays where it is, so retrying means running it again.
+                    return
                 if cmd == "ready":
                     self._print_required_tree()
                     missing = self._detect_prd_ready()

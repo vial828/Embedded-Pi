@@ -21,6 +21,7 @@
 
 | 日期 | 变更 |
 |---|---|
+| 2026-10-18 | **工作流接真**：`generate`/`test` 两个假阶段改掉 —— 跑真校验器、真失败就停、报告顶部列桩清单。见 §7 |
 | 2026-10-18 | **P0-7 完成**：S24 主机侧测试真跑（host gcc 编 + 跑 + 超时；无用例不算过）。新增 `toolchain.host_compiler`（可选但有用例时必需）。见 §7 |
 | 2026-10-18 | **P0-6 完成**：S22 真编译器（空 `src/` 不算过、缺编译器不算过、一个坏文件就整体 `passed=False`）；S23/S24 桩改为 `stub=True, passed=False`，`VerifyResult` 禁止桩报成功。见 §7 |
 | 2026-10-18 | **P0-4 完成**：S20 真 LLM 客户端（`temperature=0` 钉死、审计包先写后返、桩与断网只能报错）。旧 `--run` 路径不再能打 `[stub]` 文字。见 §7 |
@@ -56,11 +57,11 @@
 | 阶段 | 实现 | 说明 |
 |---|---|---|
 | `init` | ✅ 真 | 状态机落盘 |
-| `wait_for_external_files` | ✅ 真（**且卡死**） | 门禁见 §2.3 |
+| `wait_for_external_files` | ✅ 真（可显式豁免） | 门禁见 §2.3；`--allow-missing` 逐次豁免或 `gate.allow_missing_inputs` 持久豁免，`state.json` 记 `waived_by` |
 | `ingest` | ✅ 真 | S09 正则，116 条需求 |
-| `wait_for_design_review` | ⚠️ 半 | 人工 approve 流程真，但**没有代码从需求生成架构**，审的是空模板 |
-| `generate` | ❌ **假** | 只调 `compile_system_design()`（S07，46 行，md 表格→json），不生成任何代码 |
-| `test` | ❌ **假** | 写死一行 `"MVP workflow reached test stage."` |
+| `wait_for_design_review` | ⚠️ 半 | 人工 approve 流程真，但**没有代码从需求生成架构**，审的是空模板（等 P0-3） |
+| `generate` | ✅ 真（但只做这些） | 跑 S07 把设计编成 JSON，失败停在本阶段；**明确声明不生成代码**，不再声称“Generated” |
+| `test` | ✅ 真（S23 无证据） | 跑 S22 编译 + S24 主机测试，任一真失败就停在本阶段可 `retry`；报告顶部列出桩清单 |
 | `done` | ✅ 真 | — |
 
 ### 2.2 切片实现度（切片代码 2552 行，`slices/**/*.py` 不含 `__init__.py`）
@@ -287,6 +288,16 @@ class QualityGate:
 ---
 
 ## 7. 工作日志（只追加，最新在上）
+
+### 2026-10-18 · 工作流最后两个假阶段接真
+
+- `test` 阶段不再写死一行字：跑 S22 编译 + S24 主机测试 + S23（桩）。**真失败就停在本阶段**，可 `retry`；`state.json` 记 `test_verdicts`
+- `generate` 阶段不再说“Generated”：只跑 S07 编设计，并**明说没写任何 `src/` 代码**。设计编译失败也停在本阶段
+- **桩不算过也不算败**：S23 没出证据，所以不能拿它的 `passed=False` 把工作流锁死；但报告**顶部**就写 `No evidence (stub): static-analysis`，所以下游不能把“0 个失败”读成“全部验过”（§6 规则 4）
+- 报告现在含总结论 / 失败项 / 桩清单 / 每个阶段的工具版本、耗时、命令与输出
+- 实测（新项目 + 豁免门禁）：`compile: FAIL`（`no .c sources under src/`）、`host-tests: FAIL`（`collected nothing`）、`static-analysis: no evidence (stub)` —— 以前这里是一句 `MVP workflow reached test stage.`
+- 副作用：没生成代码的项目现在**到不了 `done`**。这是真的红而不是门禁死锁：修它的办法就是 P0-3/P0-6 要做的事
+- 新增 `tests/test_workflow_phases.py` 5 条（含“报告顶部必须有桩清单”、“真失败用例必须不推进阶段”）；全套 **126 passed**
 
 ### 2026-10-18 · P0-7 S24 主机侧测试真跑
 
