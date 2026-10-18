@@ -21,6 +21,7 @@
 
 | 日期 | 变更 |
 |---|---|
+| 2026-10-18 | **P0-5 完成**：S21 执行器落地（默认拒写 + 策略先于 IO + 全量审计）。**P0-3 方问待裁定**：需求→模块无人写声明源与 `semantic_inference: forbidden` 相冲，需选模块清单来源 A/B/C。见 §7 |
 | 2026-10-18 | **P0-2 完成**：S03 配置加载落地 —— 必需项不得默用默认、模板来源记为事实（`template: true`）、门禁开关入配置。见 §7 |
 | 2026-10-18 | **P0-1 完成**：门禁改为显式豁免 `--allow-missing`，豁免记录进 `state.json`、逐次失效不继承；回退不再静默。见 §7 |
 | 2026-10-13 | **计划变更：工作流优先**。PRD 解析冻结在"宪法合规的最小归一化"；优先打通 PRD→架构→生成→编译→测试。昨天定稿的深度解析方案降级为 §5 **伏笔**，是否采用取决于届时讨论 |
@@ -59,12 +60,12 @@
 | `test` | ❌ **假** | 写死一行 `"MVP workflow reached test stage."` |
 | `done` | ✅ 真 | — |
 
-### 2.2 切片实现度（31 个切片共 1516 行）
+### 2.2 切片实现度（切片代码 2006 行，`slices/**/*.py` 不含 `__init__.py`）
 
 | 状态 | 切片 |
 |---|---|
-| ✅ 有实现 | S02 布局(260) S09 PRD(330) S05 解析(122) S15 晋升(75) S13 长记忆(96) S06 校验(71) S03 配置(283) S16 召回(48) S07 编译(46) S11 图(43) |
-| 🟡 桩 | S20 LLM 客户端（返回 `[stub]`）S21 执行器（只有 `write_text`）S22/S23/S24 校验器（**`passed=True` 硬编码**）S25 分类（关键词）S26 重试（集合判断）S12 S14 S17 S18 S19 |
+| ✅ 有实现 | S02 布局(260) S09 PRD(330) S03 配置(333) S21 执行器(266) S05 解析(122) S15 晋升(75) S13 长记忆(96) S06 校验(71) S16 召回(48) S07 编译(46) S11 图(43) |
+| 🟡 桩 | S20 LLM 客户端（返回 `[stub]`）S22/S23/S24 校验器（**`passed=True` 硬编码**）S25 分类（关键词）S26 重试（集合判断）S12 S14 S17 S18 S19 |
 | ❌ **零代码，只有 README** | **S04 系统架构生成** **S27 追溯输出** **S28 决策日志** **S29 测试报告** **S30 质量门** **S31 CI 矩阵** |
 
 **工作流缺口 = S04 + S20 + S21 + S22 + S24 + S29 + S30。** 其余属于质量打磨。
@@ -88,7 +89,7 @@
 | **P0-2** ✅ | S03 配置加载（最小） | 读 `config/*.yaml`，暴露 toolchain 路径、provider、门禁开关 | 配置缺失时明确报错，不默用默认 | — |
 | **P0-3** | **S04 需求→架构（最小）** | 从 `requirements_index.json` 填 `MODULE_DESIGN_TABLE` / `TASK_TABLE` 的 `req_ids`（当前全 `N/A`） | 每条需求至少挂到一个 module；未挂的进 `unassigned` 并告警 | P0-1 |
 | **P0-4** | **S20 真 LLM 客户端** | 单一 provider、可关、`temperature=0`、请求/响应全量落盘 | 同输入同输出；断网时报错而非返回 `[stub]` | P0-2 |
-| **P0-5** | **S21 执行器扩展** | `write_text` + `run_command(cwd, timeout)`，动作全量追加日志 | 能写 `src/` 并跑一条命令 | P0-2 |
+| **P0-5** ✅ | **S21 执行器扩展** | `write_text` + `run_command(cwd, timeout)`，动作全量追加日志 | 能写 `src/` 并跑一条命令 | P0-2 |
 | **P0-6** | **S22 真编译器** | 调 `arm-none-eabi-gcc` 或 host `gcc`，命令与退出码落盘 | 故意写坏一个文件必须 `passed=False` | P0-5 |
 | **P0-7** | **S24 主机侧测试运行** | host gcc 编 unit test 并跑，收集结果 | 一个真实失败的用例必须让阶段失败 | P0-6 |
 | **P0-8** | **S29 测试报告** | 汇总 P0-6/P0-7 成 md + json，含需求→用例追溯 | 报告里每条能回指需求 ID | P0-3, P0-7 |
@@ -279,6 +280,19 @@ class QualityGate:
 ---
 
 ## 7. 工作日志（只追加，最新在上）
+
+### 2026-10-18 · P0-5 S21 执行器（+ P0-3 方向问题）
+
+- `ActionExecutor` 从 12 行桩变成完整实现：`write_text` / `read_text` / `run_command(argv, cwd, timeout)`，返回 `CommandResult(exit_code, stdout, stderr, duration_ms, timed_out)`
+- **`CommandResult` 故意没有 `passed` 字段** —— 「算不算过」是 S22–S24 与 S30 的职责，执行器只能报告事实，不能下结论（§6 防假通过）
+- **默认拒写**：只允许 `src/` `include/` `tests/` `Docs/ai-generation/generated/`，且必须在项目内。`Docs/prd`、`Docs/standards`、`workflow/state.json`、**自己的审计流水** 全部拒绝
+- **策略先于 IO**：这条是测试逼出来的 —— 第一版把可写性检查放在 `_record()` 里，于是**先写后查**，9 条越界路径全被真写了。测试断言「被拒就必须没落盘」直接抦住
+- **全量审计**：`Docs/ai-generation/audit/<task-id>/actions.jsonl`（沿用 `epi-llm-workflow-standard.md` §5 的审计包位置）。成功/失败/被拒全记；seq 跨进程续号，两个执行器不能都声称自己是第 1 条
+- **覆盖写必记 predecessor**：每条写带 `previous_sha256` —— 「生成物被反复清空」那起事故下次是一条查询，不是一次考古
+- **不开 shell**：argv 直接执行 + 项内 cwd + 超时；可执行文件不存在是**返回结果**不是抛异常（「编译器没装」必须是校验器能报告的事，不是一段 traceback）
+- `allowed_executables` 是给「输入来自模型」的调用方的控制面（只放配置里的工具链）；`None` = 不限，只有受信调用方能这么用
+- `tests/test_executor.py` 22 条；全套 **89 passed**。实测：写 `src/main.c` + `gcc -c` 真编译通过（122ms），两条流水带哈希
+- **P0-3 待裁定（方向层，已问用户）**：`semantic_inference: forbidden` 使「需求→模块」无法自动，而模块清单本质是人的架构决定；且现在 `module-design/module_design_table.json` 是 S07 从 `system-design.md` **派生**的，方问要反过来。选项：A `module-design.md` 改为人写源、`system-design.md` 降为生成物（推荐）；B `system-design.md` 保持唯一人写源、S04 只做覆盖率检查；C 新增 `config/architecture.yaml` 模块清单
 
 ### 2026-10-18 · P0-2 S03 配置加载
 
