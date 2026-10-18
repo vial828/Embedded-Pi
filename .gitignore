@@ -25,7 +25,23 @@ htmlcov/
 # 只锚定仓库根目录，避免误伤 tests/fixtures/**/Docs/
 /Docs/
 output/
-demo-project/
+# demo-project 不再是脚手架，而是真实项目：设计产物（md/json/yaml）跟仓库走，
+# 客户原始大文件（PRD PDF、原理图源文件、xlsx）不入库。
+# 注意：被排除的**目录**无法再 ! 放行里面的东西，所以逐层先放行目录。
+demo-project/*
+!demo-project/Docs/
+demo-project/Docs/*
+!demo-project/Docs/config.yaml
+!demo-project/Docs/standards/
+!demo-project/Docs/ai-generation/
+demo-project/Docs/ai-generation/**
+!demo-project/Docs/ai-generation/fw-architecture/
+demo-project/Docs/ai-generation/fw-architecture/**
+!demo-project/Docs/ai-generation/fw-architecture/system-design/
+!demo-project/Docs/ai-generation/fw-architecture/system-design/*.md
+!demo-project/Docs/ai-generation/knowledge/
+demo-project/Docs/ai-generation/knowledge/**
+!demo-project/Docs/ai-generation/knowledge/requirements_index.json
 *.log
 
 # --- 编辑器/系统杂项 ---

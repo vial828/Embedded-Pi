@@ -293,6 +293,25 @@ class QualityGate:
 
 ## 7. 工作日志（只追加，最新在上）
 
+### 2026-10-18 · 首次真实使用：PRD 解析**丢了 22% 的 work item**
+
+真实输入（Adonis 1.5：2.7MB PRD + 5 张 SCH + IO-Mapping xlsx）进来后先做保全审计，结果不是“能跑”而是“在漏”：
+
+- **PDF 正文有 145 个 story（带 145 个唯一 work item ID），索引只进了 116 条** —— 丢了 32 个 work item（FW Signature / FW Encryption / FOTA / BLE Pairing / Readout Protection 这些核心项全不在内）
+- **根因不是“没解析到”，是身份被偷了**：story 自己的 ID 在 PDF 的**标题链接**里，而正文里的 `please refer to User Story 2258143` 是**指向别人**的 ID。旧逻辑从正文抽 ID，又把占位条目“折叠”进目标 —— 于是占位条目自己的 ID 消失、目标的 ID 被重复使用（实测 3 个 ID 各有 2 条需求）
+- **修法**：新增 `_extract_pdf_story_headers()` 从 XML 粗体标题链接拿 `(id, title)`，按文档顺序单调对齐；**正文提到的 ID 只能当 `refers_to`，不能当身份**；占位条目**一律保留**（`origin: reference`）
+- **修后实测**：145 进 145，ID 全唯一、0 丢失、0 重复，`id_source` 全部 `story-header`；32 个 reference 条目里 30 个带 `refers_to`
+- 有 3 条旧测试写的是“占位条目应被折叠”——那是旧错误行为的契约，按新契约重写了（测试从 16 → 17）
+
+### 2026-10-18 · 掌握硬件：config 里的型号是假的
+
+从 IO-Mapping xlsx（无依赖直读 zip+XML）与 SCH PDF 提取出：主控 **CY8C6245FNI-S3D41**（PSoC 6 双核）、BLE 协处理器 **SS805EX**、充电 **BQ25622**、电量计 **BQ27426**、电源 **MP4235 / SGM38045**；加热在 V2.0→V2.1 从热电偶改 **TCR + 双运放采样**。
+
+- **最关键的硬件事实**：**OCP（过流）与 OTP（过热）保护在 SS805EX 侧独立存在**，而且 BLE 侧能复位 MCU（`CY_NRES`）。安全不只在 MCU 里，软件限幅必须与对端一致
+- **`config.yaml` 还写着 `mcu.part: STM32F407VGT6`**（S02 模板占位），与硬件完全不符 —— 已标记，留给人工改（`template: true` 的抹除必须是人的声明）
+- 产出 `PROPOSAL-system-design-draft.md`（19 个模块 / 145 条全分配 / 每条印出命中规则 / 16 条兜底单独标出），**故意不写进 `system-design.md`**：覆盖检查仍报 `not-evaluated`，S30 仍拒认证 —— 未评审的草案不能认证任何东西
+- `.gitignore` 不再整目录忽略 `demo-project/`：设计产物（md/json/yaml）跟仓库走，客户原始大文件（PRD PDF、SchDoc、xlsx）仍不入库
+
 ### 2026-10-18 · P0-3b：按 B 落地，但拆成“改一个函数”的可逆形状
 
 - **没有干等 A/B/C 裁定**。理由：三者都需要同一个 join，而 B 的成立证据最强（schema 本来就有 `req_ids` + `TRACEABILITY_LINKS`、S06 已在校 ID、工作流已有人工评审门）。干等不会让裁定更容易，只会让后面堆更多未做的
