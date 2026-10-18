@@ -166,6 +166,17 @@ class LLMConfig(_StrictModel):
         return self.provider == "stub"
 
 
+    @field_validator("temperature")
+    @classmethod
+    def _no_sampling(cls, value: float) -> float:
+        if value != 0.0:
+            raise ValueError(
+                "must be 0 - pipeline calls are reproducible by requirement; "
+                "delete the temperature line instead of raising it"
+            )
+        return value
+
+
 class GateConfig(_StrictModel):
     """Quality/input gates. Every default keeps the gate armed."""
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from firmware_agent.config import load_config
 from firmware_agent.context.assembler import ContextAssembler
-from firmware_agent.llm.client import LLMClient
+from firmware_agent.llm.client import LLMClient, LLMRequest, prompt_sha_of
 from firmware_agent.memory.store import ConstraintRecord, DecisionRecord, MemoryStore
 from firmware_agent.planner import TaskPlanner
 from firmware_agent.slices.S09_PRD_Ingestion.prd_ingestion import ingest_prd
@@ -20,7 +20,7 @@ class FirmwareAgent:
         self.state = WorkingState(mcu=self.config.project.name)
         self.planner = TaskPlanner()
         self.assembler = ContextAssembler(self.config, str(self.workspace_dir))
-        self.llm = LLMClient()
+        self.llm = LLMClient(self.config, self.workspace_dir)
         self.verifier = Verifier()
         self.memory = MemoryStore(self.workspace_dir)
         self.prd_index_path = ingest_prd(self.workspace_dir)
@@ -61,7 +61,7 @@ class FirmwareAgent:
     def run(self, dry_run: bool = False) -> list[str]:
         logs: list[str] = []
         tasks = self.planner.plan()
-        for task in tasks:
+        for index, task in enumerate(tasks, start=1):
             self.state.current_task = task.description
             self.memory.persist_working_memory(self.state)
             long_memory_pack = self.memory.build_memory_pack(task)
@@ -71,7 +71,15 @@ class FirmwareAgent:
                 logs.append("  dry-run: skip execution")
                 continue
 
-            _ = self.llm.generate(context)
+            response = self.llm.generate(
+                LLMRequest(
+                    task_id=f"legacy-{index:03d}",
+                    action="elaborate",
+                    prompt_sha=prompt_sha_of(context),
+                    context=context,
+                )
+            )
+            logs.append(f"  llm: {len(response.text)} chars recorded at {response.raw_path}")
             if task.needs_verification:
                 result = self.verifier.verify(task.description)
                 logs.append(f"  verify: {'PASS' if result.passed else 'FAIL'}")

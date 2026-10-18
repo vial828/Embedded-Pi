@@ -21,6 +21,7 @@
 
 | 日期 | 变更 |
 |---|---|
+| 2026-10-18 | **P0-4 完成**：S20 真 LLM 客户端（`temperature=0` 钉死、审计包先写后返、桩与断网只能报错）。旧 `--run` 路径不再能打 `[stub]` 文字。见 §7 |
 | 2026-10-18 | **P0-5 完成**：S21 执行器落地（默认拒写 + 策略先于 IO + 全量审计）。**P0-3 方问待裁定**：需求→模块无人写声明源与 `semantic_inference: forbidden` 相冲，需选模块清单来源 A/B/C。见 §7 |
 | 2026-10-18 | **P0-2 完成**：S03 配置加载落地 —— 必需项不得默用默认、模板来源记为事实（`template: true`）、门禁开关入配置。见 §7 |
 | 2026-10-18 | **P0-1 完成**：门禁改为显式豁免 `--allow-missing`，豁免记录进 `state.json`、逐次失效不继承；回退不再静默。见 §7 |
@@ -60,12 +61,12 @@
 | `test` | ❌ **假** | 写死一行 `"MVP workflow reached test stage."` |
 | `done` | ✅ 真 | — |
 
-### 2.2 切片实现度（切片代码 2006 行，`slices/**/*.py` 不含 `__init__.py`）
+### 2.2 切片实现度（切片代码 2247 行，`slices/**/*.py` 不含 `__init__.py`）
 
 | 状态 | 切片 |
 |---|---|
-| ✅ 有实现 | S02 布局(260) S09 PRD(330) S03 配置(333) S21 执行器(266) S05 解析(122) S15 晋升(75) S13 长记忆(96) S06 校验(71) S16 召回(48) S07 编译(46) S11 图(43) |
-| 🟡 桩 | S20 LLM 客户端（返回 `[stub]`）S22/S23/S24 校验器（**`passed=True` 硬编码**）S25 分类（关键词）S26 重试（集合判断）S12 S14 S17 S18 S19 |
+| ✅ 有实现 | S02 布局(260) S09 PRD(330) S03 配置(344) S21 执行器(266) S20 LLM 客户端(236) S05 解析(122) S15 晋升(75) S13 长记忆(96) S06 校验(71) S16 召回(48) S07 编译(46) S11 图(43) |
+| 🟡 桩 | S22/S23/S24 校验器（**`passed=True` 硬编码**）S25 分类（关键词）S26 重试（集合判断）S12 S14 S17 S18 S19 |
 | ❌ **零代码，只有 README** | **S04 系统架构生成** **S27 追溯输出** **S28 决策日志** **S29 测试报告** **S30 质量门** **S31 CI 矩阵** |
 
 **工作流缺口 = S04 + S20 + S21 + S22 + S24 + S29 + S30。** 其余属于质量打磨。
@@ -88,7 +89,7 @@
 | **P0-1** ✅ | 门禁改为**显式可跳过 + 报告** | 缺输入时打印缺什么，允许 `--allow-missing` 继续；不再静默回退状态 | demo 项目能走到 `ingest` 并产出 116 条 | — |
 | **P0-2** ✅ | S03 配置加载（最小） | 读 `config/*.yaml`，暴露 toolchain 路径、provider、门禁开关 | 配置缺失时明确报错，不默用默认 | — |
 | **P0-3** | **S04 需求→架构（最小）** | 从 `requirements_index.json` 填 `MODULE_DESIGN_TABLE` / `TASK_TABLE` 的 `req_ids`（当前全 `N/A`） | 每条需求至少挂到一个 module；未挂的进 `unassigned` 并告警 | P0-1 |
-| **P0-4** | **S20 真 LLM 客户端** | 单一 provider、可关、`temperature=0`、请求/响应全量落盘 | 同输入同输出；断网时报错而非返回 `[stub]` | P0-2 |
+| **P0-4** ✅ | **S20 真 LLM 客户端** | 单一 provider、可关、`temperature=0`、请求/响应全量落盘 | 同输入同输出；断网时报错而非返回 `[stub]` | P0-2 |
 | **P0-5** ✅ | **S21 执行器扩展** | `write_text` + `run_command(cwd, timeout)`，动作全量追加日志 | 能写 `src/` 并跑一条命令 | P0-2 |
 | **P0-6** | **S22 真编译器** | 调 `arm-none-eabi-gcc` 或 host `gcc`，命令与退出码落盘 | 故意写坏一个文件必须 `passed=False` | P0-5 |
 | **P0-7** | **S24 主机侧测试运行** | host gcc 编 unit test 并跑，收集结果 | 一个真实失败的用例必须让阶段失败 | P0-6 |
@@ -280,6 +281,17 @@ class QualityGate:
 ---
 
 ## 7. 工作日志（只追加，最新在上）
+
+### 2026-10-18 · P0-4 S20 真 LLM 客户端
+
+- `LLMClient` 替掉返回 `[stub] ...` 的桩：单一 provider（`openai_compatible`）、`temperature=0` + `seed=0` **钉在请求里**、请求前先写 `task.json` + `input.numbered.txt`，返回前先写 `output.raw` + `response.json`
+- **审计包先写后返**：没留下审计的调用等于没发生过；`task_id` 重用直接 `AuditConflict`（重试必须另开 attempt，而不是覆写证据）。失败的 attempt 不写 `output.raw`，所以同一 id 允许重试
+- **`temperature` 从配置里拿掉选择权**：模板改为 `0.0`，非 0 在**加载期**报错（而不是客户端默默发 0）。一个能悄悄改变可复现性的旋钮与 P0-2 要拆的默用默认同罪
+- **密钥只从环境读** `EPI_LLM_API_KEY`，绝不进 `Docs/config.yaml`（那是要进 git 的）；测试直接断言密钥不出现在审计包任何文件里
+- 桩纪律：`provider: stub` **报错且不写审计包**（一个看起来像调用的桩比没调用更坑）；`EPI_LLM_ENABLED=0` 也报错而不是默默跳过
+- 旧 `--run` 路径（`agent.py`）接上真客户端：以前 `_ = self.llm.generate(context)` 把结果丢掉，现在无 provider 就 `ProviderUnavailable`。新增 smoke 测试钉住「不许编文字」
+- 测试 14 条：假 transport 验确定性与审计内容，真 `HTTPServer` 验 urllib 真路径，端口 1 验**拒连时报错而非返文字**；全套 **104 passed**
+- 附带整理：`tests/fixtures/sample_project/` 下曾有**两份** config（根目录 + `Docs/`），只有一份是有效的；现只留 `Docs/config.yaml` 一份（与 S02 布局契约一致），删掉根目录那份避免再漂移
 
 ### 2026-10-18 · P0-5 S21 执行器（+ P0-3 方向问题）
 
