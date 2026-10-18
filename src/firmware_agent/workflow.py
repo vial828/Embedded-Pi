@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 
@@ -30,15 +30,19 @@ class WorkflowState:
     last_completed_phase: str = ""
     approved_design: bool = False
     notes: str = ""
+    # Required inputs the current run was explicitly allowed to proceed without.
+    # Persisted so a state file cannot look like a gated run when it was waived.
+    waived_missing: list[str] = field(default_factory=list)
 
 
 class WorkflowRunner:
-    def __init__(self, project_dir: Path):
+    def __init__(self, project_dir: Path, allow_missing: bool = False):
         self.project_dir = project_dir
         self.docs_root = project_dir / "Docs"
         self.state_path = self.docs_root / "ai-generation" / "workflow" / "state.json"
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state = self.load_state()
+        self.allow_missing = allow_missing
 
     def load_state(self) -> WorkflowState:
         if self.state_path.exists():
@@ -101,6 +105,9 @@ class WorkflowRunner:
     def _show_status(self) -> None:
         console.clear()
         console.print(self._status_bar())
+        if self.state.waived_missing:
+            console.print(f"[magenta]Gate waived:[/magenta] {len(self.state.waived_missing)} required input(s) "
+                          f"missing but accepted this run")
         console.print("[bold cyan]Roadmap[/bold cyan]")
         for idx, line in enumerate(self._roadmap_lines(), 1):
             if self._roadmap_stage_active(idx):
@@ -195,7 +202,9 @@ class WorkflowRunner:
         if missing:
             console.print("[yellow]Missing paths:[/yellow]")
             for item in missing:
-                console.print(f"  - {item}")
+                waived = item in self.state.waived_missing
+                tag = "  [magenta](waived)[/magenta]" if waived else ""
+                console.print(f"  - {item}{tag}")
 
     def _missing_required_paths(self) -> list[str]:
         missing: list[str] = []
@@ -205,7 +214,34 @@ class WorkflowRunner:
         return missing
 
     def _detect_prd_ready(self) -> list[str]:
-        return self._missing_required_paths()
+        """Missing inputs that still block this run, i.e. not covered by a waiver."""
+        return [m for m in self._missing_required_paths() if m not in self.state.waived_missing]
+
+    def _apply_missing_waiver(self) -> None:
+        """Grant or expire the gate waiver for this run.
+
+        A waiver is granted per invocation and never silently carries over: the
+        flag has to be passed again. Otherwise one --allow-missing run would arm
+        the bypass for every later run, which is the silent-fallback failure mode
+        this gate is supposed to prevent.
+        """
+        missing = self._missing_required_paths()
+        if not self.allow_missing:
+            if self.state.waived_missing:
+                console.print("[dim]Previous waiver expired. Rerun with --allow-missing to waive again.[/dim]")
+                self.state.waived_missing = []
+                self.save_state()
+            return
+        if not missing:
+            return
+        self.state.waived_missing = sorted(set(self.state.waived_missing) | set(missing))
+        self.state.notes = "external input gate waived with --allow-missing"
+        self.save_state()
+        console.print("[magenta]External input gate WAIVED (--allow-missing).[/magenta] Proceeding without:")
+        for item in missing:
+            console.print(f"  - {item}")
+        console.print("[dim]Downstream artifacts from this run are not fully sourced; "
+                      "see waived_missing in the workflow state.[/dim]")
 
     def _advance(self, next_phase: WorkflowPhase) -> None:
         self.state.last_completed_phase = self.state.phase
@@ -230,6 +266,9 @@ class WorkflowRunner:
     def _pin_to_external_gate_if_needed(self) -> bool:
         missing = self._detect_prd_ready()
         if missing and self.state.phase not in {WorkflowPhase.INIT.value, WorkflowPhase.WAIT_FOR_EXTERNAL_FILES.value}:
+            console.print("[yellow]Gate re-armed: returning to external input. Blocking inputs:[/yellow]")
+            for item in missing:
+                console.print(f"  - {item}")
             self.state.phase = WorkflowPhase.WAIT_FOR_EXTERNAL_FILES.value
             self.state.last_completed_phase = ""
             self.state.approved_design = False
@@ -240,6 +279,7 @@ class WorkflowRunner:
 
     def run(self) -> None:
         self._print_banner("EPI Workflow MVP")
+        self._apply_missing_waiver()
         self._pin_to_external_gate_if_needed()
         self._show_status()
         self.save_state()
@@ -344,5 +384,5 @@ class WorkflowRunner:
             console.print(f"[red]Allowed commands:[/red] {', '.join(sorted(allowed))}")
 
 
-def run_workflow(project_dir: Path) -> None:
-    WorkflowRunner(project_dir).run()
+def run_workflow(project_dir: Path, allow_missing: bool = False) -> None:
+    WorkflowRunner(project_dir, allow_missing=allow_missing).run()

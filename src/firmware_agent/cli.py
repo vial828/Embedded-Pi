@@ -62,6 +62,7 @@ def entry(
     run_agent: bool = typer.Option(False, "--run", help="Run legacy agent after ensuring layout"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Used with --run"),
     workflow: bool = typer.Option(True, "--workflow/--no-workflow", help="Run the resumable workflow MVP (default on)"),
+    allow_missing: bool = typer.Option(False, "--allow-missing", help="Proceed past the external input gate despite missing inputs; the waiver is recorded in the workflow state"),
 ) -> None:
     """
     Usage:
@@ -102,7 +103,7 @@ def entry(
             raise typer.Exit(code=4)
 
     if workflow:
-        run_workflow(root)
+        run_workflow(root, allow_missing=allow_missing)
         return
 
     if run_agent:

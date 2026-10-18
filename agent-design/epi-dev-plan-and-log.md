@@ -21,6 +21,7 @@
 
 | 日期 | 变更 |
 |---|---|
+| 2026-10-18 | **P0-1 完成**：门禁改为显式豁免 `--allow-missing`，豁免记录进 `state.json`、逐次失效不继承；回退不再静默。见 §7 |
 | 2026-10-13 | **计划变更：工作流优先**。PRD 解析冻结在"宪法合规的最小归一化"；优先打通 PRD→架构→生成→编译→测试。昨天定稿的深度解析方案降级为 §5 **伏笔**，是否采用取决于届时讨论 |
 | 2026-10-13 | 生成物被反复清空已修（`9c0dd11`）；PRD 解析质量已修（`5d94bc6`，176→116 条） |
 | 2026-10-12 | LLM 使用标准流定稿（`epi-llm-workflow-standard.md`）。其 §9 实施顺序**整体后置**到骨架跑通之后 |
@@ -82,7 +83,7 @@
 
 | # | 工作项 | 目标 | 验收 | 依赖 |
 |---|---|---|---|---|
-| **P0-1** | 门禁改为**显式可跳过 + 报告** | 缺输入时打印缺什么，允许 `--allow-missing` 继续；不再静默回退状态 | demo 项目能走到 `ingest` 并产出 116 条 | — |
+| **P0-1** ✅ | 门禁改为**显式可跳过 + 报告** | 缺输入时打印缺什么，允许 `--allow-missing` 继续；不再静默回退状态 | demo 项目能走到 `ingest` 并产出 116 条 | — |
 | **P0-2** | S03 配置加载（最小） | 读 `config/*.yaml`，暴露 toolchain 路径、provider、门禁开关 | 配置缺失时明确报错，不默用默认 | — |
 | **P0-3** | **S04 需求→架构（最小）** | 从 `requirements_index.json` 填 `MODULE_DESIGN_TABLE` / `TASK_TABLE` 的 `req_ids`（当前全 `N/A`） | 每条需求至少挂到一个 module；未挂的进 `unassigned` 并告警 | P0-1 |
 | **P0-4** | **S20 真 LLM 客户端** | 单一 provider、可关、`temperature=0`、请求/响应全量落盘 | 同输入同输出；断网时报错而非返回 `[stub]` | P0-2 |
@@ -277,6 +278,17 @@ class QualityGate:
 ---
 
 ## 7. 工作日志（只追加，最新在上）
+
+### 2026-10-18 · P0-1 门禁显式豁免
+
+- `--allow-missing` 把外部门禁从"必须满足"改成"显式豁免"：缺什么逐条打印，`waived_missing` 落进 `state.json`，`notes` 标注 —— 被豁免的跑与通过门禁的跑，从状态文件上就能分辨
+- **豁免逐次失效**：不带 flag 的下一次运行自动清空豁免。否则一次 `--allow-missing` 就把门禁永久解除，正是这个门禁要防的静默回退
+- 豁免**按路径精确生效**：只放行清单内的项；新出现的缺失项照样阻塞
+- 修掉静默回退：`_pin_to_external_gate_if_needed()` 把状态打回 `wait_for_external_files` 时现在必须打印是哪几条输入卡的
+- `tests/test_workflow_gate.py` 7 条：模板目录不算就绪、豁免需显式请求且持久化、逐次失效、按路径精确、回退必须报告、豁免后不再被拉回门禁、CLI 层 flag 真的存在（用 `typer.testing.CliRunner` 走真实参数解析）
+- 端到端实测：新建项目 + 4 条 markdown 需求 → 不带 flag 卡在门禁；带 flag 走到 `ingest`，产出 `requirements_index.json` 4 条，阶段 `wait_for_design_review`
+- **验收打折处说明**：「产出 116 条」需要真实 ADO PDF，而 `demo-project/` 在 `.gitignore` 里，只存在于 Windows 那台。Linux 侧用 4 条 md 需求验证了同一门禁路径
+- 顺带：Linux 机器没有可用的 Python 环境（PEP 668 外部管理），已建 `.venv` 并 `pip install -e .[dev]`，`epi` 可用；测试 52 passed
 
 ### 2026-10-16 · 切片大图语义重构 + 图工具链
 
