@@ -5,4 +5,10 @@ class SimulatorVerifier:
     """S24 simulator verifier stub."""
 
     def verify(self, task_name: str) -> VerifyResult:
-        return VerifyResult(passed=True, output=f"[stub] simulator verified: {task_name}")
+        # See S23: a stub reports that it did nothing, it does not hand out a pass.
+        return VerifyResult(
+            passed=False,
+            output=f"[stub] simulator run not implemented; no verdict for {task_name!r}",
+            stub=True,
+            tool="stub",
+        )

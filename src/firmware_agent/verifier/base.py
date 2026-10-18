@@ -3,7 +3,9 @@ from firmware_agent.slices.S22_Compiler_Verifier.compiler_verifier import (
     VerifyResult,
 )
 from firmware_agent.slices.S23_Static_Verifier.static_verifier import StaticVerifier
-from firmware_agent.slices.S24_Simulator_Verifier.simulator_verifier import SimulatorVerifier
+from firmware_agent.slices.S24_Simulator_Verifier.simulator_verifier import (
+    SimulatorVerifier,
+)
 from firmware_agent.slices.S25_Error_Classifier.error_classifier import ErrorClassifier
 from firmware_agent.slices.S26_Retry_Strategy.retry_strategy import RetryStrategy
 
@@ -11,8 +13,10 @@ from firmware_agent.slices.S26_Retry_Strategy.retry_strategy import RetryStrateg
 class Verifier:
     """Compatibility facade over S22~S26 verifier slices."""
 
-    def __init__(self) -> None:
-        self.compiler = CompilerVerifier()
+    def __init__(self, config=None, project_root=None) -> None:
+        # Optional so the facade keeps constructing in legacy paths, but an
+        # unconfigured CompilerVerifier can only fail - it has no compiler to run.
+        self.compiler = CompilerVerifier(config, project_root)
         self.static = StaticVerifier()
         self.sim = SimulatorVerifier()
         self.classifier = ErrorClassifier()

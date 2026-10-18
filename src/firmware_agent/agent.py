@@ -21,7 +21,7 @@ class FirmwareAgent:
         self.planner = TaskPlanner()
         self.assembler = ContextAssembler(self.config, str(self.workspace_dir))
         self.llm = LLMClient(self.config, self.workspace_dir)
-        self.verifier = Verifier()
+        self.verifier = Verifier(self.config, self.workspace_dir)
         self.memory = MemoryStore(self.workspace_dir)
         self.prd_index_path = ingest_prd(self.workspace_dir)
         self._bootstrap_memory_constraints()
