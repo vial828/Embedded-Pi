@@ -9,6 +9,9 @@ from pathlib import Path
 from rich.console import Console
 
 from firmware_agent.config import load_project_config
+from firmware_agent.slices.S04_System_Design_Generation.requirement_coverage import (
+    check_project,
+)
 from firmware_agent.slices.S07_Compiler.compiler import compile_system_design
 from firmware_agent.slices.S09_PRD_Ingestion.prd_ingestion import ingest_prd
 from firmware_agent.slices.S22_Compiler_Verifier.compiler_verifier import (
@@ -57,6 +60,9 @@ class WorkflowState:
     test_verdicts: dict[str, str] = field(default_factory=dict)
     # S30's certification for the last run: accepted | rejected | "" (never judged).
     quality_gate: str = ""
+    # Requirement -> architecture coverage at last design review:
+    # complete | incomplete | not-evaluated | "" (never checked).
+    requirement_coverage: str = ""
 
 
 class WorkflowRunner:
@@ -133,13 +139,18 @@ class WorkflowRunner:
         `no_evidence` gets its own word and colour: a stub that renders like a pass
         here would undo the whole point of recording verdicts separately.
         """
-        if not self.state.test_verdicts and not self.state.quality_gate:
+        if not self.state.test_verdicts and not self.state.quality_gate and not self.state.requirement_coverage:
             return []
 
         tags = {"pass": "[green]pass[/green]", "fail": "[red]fail[/red]"}
         lines = ["[bold cyan]Evidence[/bold cyan]"]
         for stage, verdict in self.state.test_verdicts.items():
             lines.append(f"  {stage}: {tags.get(verdict, '[magenta]no evidence (stub)[/magenta]')}")
+
+        if self.state.requirement_coverage:
+            verdict = self.state.requirement_coverage
+            colour = "green" if verdict == "complete" else ("red" if verdict == "incomplete" else "yellow")
+            lines.append(f"  requirement coverage: [{colour}]{verdict}[/{colour}]")
 
         if self.state.quality_gate == "accepted":
             lines.append("  [green]CERTIFIED[/green] by the quality gate")
@@ -342,6 +353,32 @@ class WorkflowRunner:
     def _blocked_reason(self) -> str:
         return ""
 
+    def _report_design_coverage(self) -> None:
+        """Show requirement -> architecture coverage where it can still be acted on.
+
+        A warning, not a gate: where the module manifest lives is still an open
+        ruling. What is not open is that approving a design should not hide the
+        requirements that design does not account for.
+        """
+        coverage = check_project(self.project_dir)
+        self.state.requirement_coverage = coverage.status
+
+        if not coverage.evaluated:
+            console.print(f"[yellow]Requirement coverage not judged[/yellow]: {coverage.reason}")
+            return
+        if coverage.unknown_refs:
+            first = coverage.unknown_refs[0]
+            claimant = first.get("claimant", first.get("section"))
+            console.print(f"[yellow]Broken design references:[/yellow] {len(coverage.unknown_refs)}, e.g. "
+                          f"{claimant} -> {first.get('declared', first.get('problem'))}")
+        if coverage.unassigned:
+            total = len(coverage.unassigned) + len(coverage.assigned)
+            shown = ", ".join(coverage.unassigned[:12])
+            extra = f", ... and {len(coverage.unassigned) - 12} more" if len(coverage.unassigned) > 12 else ""
+            console.print(f"[yellow]Unmapped requirements[/yellow] ({len(coverage.unassigned)}/{total}): {shown}{extra}")
+        if coverage.status == "complete":
+            console.print("[green]Requirement coverage: complete[/green]")
+
     def _ensure_design_template(self) -> Path:
         path = self.docs_root / "ai-generation" / "fw-architecture" / "system-design" / "system-design.md"
         if not path.exists():
@@ -398,6 +435,7 @@ class WorkflowRunner:
             if phase == WorkflowPhase.WAIT_FOR_DESIGN_REVIEW:
                 design_path = self._ensure_design_template()
                 console.print(f"[cyan]Design ready for review:[/cyan] {design_path}")
+                self._report_design_coverage()
                 console.print("Review the design, then type [bold]approve[/bold] to continue or [bold]revise[/bold] to stop here.")
                 console.print("Type [bold]status[/bold] to review the roadmap, current step, and next step.")
                 if self.state.approved_design:

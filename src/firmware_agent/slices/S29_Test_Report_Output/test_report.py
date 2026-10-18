@@ -38,7 +38,13 @@ import re
 from pathlib import Path
 from typing import Any
 
-__all__ = ["REQUIREMENTS_INDEX_RELATIVE", "build_report", "extract_requires_links", "write_report"]
+__all__ = [
+    "REQUIREMENTS_INDEX_RELATIVE",
+    "build_report",
+    "extract_requires_links",
+    "load_requirements_index",
+    "write_report",
+]
 
 REQUIREMENTS_INDEX_RELATIVE = "Docs/ai-generation/knowledge/requirements_index.json"
 REPORT_RELATIVE = "Docs/ai-generation/reports"
@@ -77,7 +83,7 @@ def extract_requires_links(project_root: Path) -> list[dict[str, Any]]:
     return links
 
 
-def _load_requirements(project_root: Path) -> tuple[list[dict[str, Any]], str | None]:
+def load_requirements_index(project_root: Path) -> tuple[list[dict[str, Any]], str | None]:
     path = project_root / REQUIREMENTS_INDEX_RELATIVE
     if not path.exists():
         return [], f"{REQUIREMENTS_INDEX_RELATIVE} does not exist - PRD not ingested"
@@ -97,7 +103,7 @@ def _load_requirements(project_root: Path) -> tuple[list[dict[str, Any]], str | 
 
 def build_report(project_root: Path, verdicts: dict[str, Any]) -> dict[str, Any]:
     """Assemble the report dictionary. Deterministic: same inputs, same bytes."""
-    requirements, unavailable_reason = _load_requirements(project_root)
+    requirements, unavailable_reason = load_requirements_index(project_root)
     known_ids = {item.get("req_id") for item in requirements}
     links = extract_requires_links(project_root)
 

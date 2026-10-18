@@ -21,6 +21,7 @@
 
 | 日期 | 变更 |
 |---|---|
+| 2026-10-18 | **P0-3 拆半**：需求→模块覆盖检查先做（源无关），清单来源仍等裁定。**新证据偏向 B**：schema 已有 `req_ids` + `TRACEABILITY_LINKS`。见 §7 |
 | 2026-10-18 | **P0-9 完成**：S30 质量门。只读报告不重算事实；有桩参与 → `rejected`；`rejected` = 不予认证而非阻断流程。见 §7 |
 | 2026-10-18 | **P0-8 完成**：S29 测试报告（md+json）。追溯靠声明 `/* requires: R-001 */`，不靠推导；`not-evaluated` ≠ `complete`。见 §7 |
 | 2026-10-18 | **工作流接真**：`generate`/`test` 两个假阶段改掉 —— 跑真校验器、真失败就停、报告顶部列桩清单。见 §7 |
@@ -66,7 +67,7 @@
 | `test` | ✅ 真（S23 无证据） | 跑 S22 编译 + S24 主机测试，任一真失败就停在本阶段可 `retry`；报告顶部列出桩清单 |
 | `done` | ✅ 真 | — |
 
-### 2.2 切片实现度（切片代码 2972 行，`slices/**/*.py` 不含 `__init__.py`）
+### 2.2 切片实现度（切片代码 3173 行，`slices/**/*.py` 不含 `__init__.py`）
 
 | 状态 | 切片 |
 |---|---|
@@ -93,7 +94,7 @@
 |---|---|---|---|---|
 | **P0-1** ✅ | 门禁改为**显式可跳过 + 报告** | 缺输入时打印缺什么，允许 `--allow-missing` 继续；不再静默回退状态 | demo 项目能走到 `ingest` 并产出 116 条 | — |
 | **P0-2** ✅ | S03 配置加载（最小） | 读 `config/*.yaml`，暴露 toolchain 路径、provider、门禁开关 | 配置缺失时明确报错，不默用默认 | — |
-| **P0-3** | **S04 需求→架构（最小）** | 从 `requirements_index.json` 填 `MODULE_DESIGN_TABLE` / `TASK_TABLE` 的 `req_ids`（当前全 `N/A`） | 每条需求至少挂到一个 module；未挂的进 `unassigned` 并告警 | P0-1 |
+| **P0-3** ⚠部分 | **S04 需求→架构（最小）** | 已做：需求→模块**覆盖检查**（`requirement_coverage.py`，源无关）。未做：生成设计本身（等 A/B/C 裁定） | 每条需求至少挂到一个 module；未挂的进 `unassigned` 并告警 | P0-1 |
 | **P0-4** ✅ | **S20 真 LLM 客户端** | 单一 provider、可关、`temperature=0`、请求/响应全量落盘 | 同输入同输出；断网时报错而非返回 `[stub]` | P0-2 |
 | **P0-5** ✅ | **S21 执行器扩展** | `write_text` + `run_command(cwd, timeout)`，动作全量追加日志 | 能写 `src/` 并跑一条命令 | P0-2 |
 | **P0-6** ✅ | **S22 真编译器** | 调 `arm-none-eabi-gcc` 或 host `gcc`，命令与退出码落盘 | 故意写坏一个文件必须 `passed=False` | P0-5 |
@@ -290,6 +291,16 @@ class QualityGate:
 ---
 
 ## 7. 工作日志（只追加，最新在上）
+
+### 2026-10-18 · P0-3 的可判定那一半（不等裁定）
+
+- **把 P0-3 拆成“覆盖检查”和“清单来源”**。三者（A/B/C）都需要同一个 join + unassigned 报告，所以先把这段做了；`evaluate_coverage()` 源无关，`check_project()` 是适配器 —— 裁定下来只改适配器
+- **模板不是设计：拿字节比，不用启发式。** 模板里的示例行看着很真（`IF-001 / sensor_q`），任何内容启发式都会把脚手架读成设计。改成跟 S02 生成的模板做**完整字节对比**（就是 `config.yaml` 里 `template: true` 的手法）
+- **脚手架行不声明任何东西**：`name` 或 id 还是 `N/A` 的行是生成器写的，不是设计师写的，不计入覆盖
+- **断链要署名**：`req_ids` 里的 `R-999` 连声明者一起报（`module:MOD-001 -> R-999`），丢掉就等于把断链变成一份干净的报告
+- 接入点选在 `wait_for_design_review` 的 **approve 之前**：批准一份设计的人应该看得见哪些需求它没管 —— 这里是**告警不是门**，因为清单来源还没裁
+- **新证据（偏向 B）**：`system-design.md` 的 schema **本来就有** `MODULE_DESIGN_TABLE/TASK/INTERFACE.req_ids` 和 `TRACEABILITY_LINKS`，S06 已在校 ID，工作流也已有人工评审门 —— 选 A 会让一个事实有两个家
+- 新增 `tests/test_requirement_coverage.py` 15 条 + 工作流 4 条；全套 **176 passed**
 
 ### 2026-10-18 · 状态页要能看见证据
 

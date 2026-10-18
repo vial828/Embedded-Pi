@@ -158,3 +158,69 @@ def test_status_reports_an_unjudged_gate_as_unjudged(runner: WorkflowRunner) -> 
     runner.state.test_verdicts = {"compile": "pass"}
 
     assert "quality gate: not judged yet" in "\n".join(runner._evidence_lines())
+
+
+# --------------------------------------------------- design review: coverage
+
+
+def at_design_review(runner: WorkflowRunner) -> WorkflowRunner:
+    runner.state.phase = WorkflowPhase.WAIT_FOR_DESIGN_REVIEW.value
+    return runner
+
+
+def ingest_requirements(runner: WorkflowRunner, ids: list[str]) -> None:
+    index = runner.project_dir / "Docs/ai-generation/knowledge/requirements_index.json"
+    index.write_text(json.dumps({"requirements": [{"req_id": i} for i in ids]}), encoding="utf-8")
+
+
+def test_design_review_reports_coverage_instead_of_assuming_it(runner: WorkflowRunner) -> None:
+    at_design_review(runner)
+
+    runner._report_design_coverage()
+
+    assert runner.state.requirement_coverage == "not-evaluated"
+
+
+def test_an_untouched_design_template_is_not_read_as_coverage(runner: WorkflowRunner) -> None:
+    at_design_review(runner)
+    ingest_requirements(runner, ["R-001"])
+
+    runner._report_design_coverage()
+
+    assert runner.state.requirement_coverage == "not-evaluated"
+
+
+def test_unmapped_requirements_are_named_before_approval(runner: WorkflowRunner, capsys) -> None:
+    at_design_review(runner)
+    ingest_requirements(runner, ["R-001", "R-002"])
+    design = runner.project_dir / "Docs/ai-generation/fw-architecture/system-design/system-design.md"
+    design.write_text(
+        design.read_text(encoding="utf-8").replace(
+            "| MOD-001 | module | N/A | N/A | N/A | N/A | N/A | R-001 |",
+            "| MOD-001 | module | crc | checksum | spi | out | none | R-001 |",
+        ),
+        encoding="utf-8",
+    )
+
+    runner._report_design_coverage()
+
+    assert runner.state.requirement_coverage == "incomplete"
+    assert "R-002" in capsys.readouterr().out
+
+
+def test_a_mapped_design_shows_complete_coverage(runner: WorkflowRunner) -> None:
+    at_design_review(runner)
+    ingest_requirements(runner, ["R-001"])
+    design = runner.project_dir / "Docs/ai-generation/fw-architecture/system-design/system-design.md"
+    design.write_text(
+        design.read_text(encoding="utf-8").replace(
+            "| MOD-001 | module | N/A | N/A | N/A | N/A | N/A | R-001 |",
+            "| MOD-001 | module | crc | checksum | spi | out | none | R-001 |",
+        ),
+        encoding="utf-8",
+    )
+
+    runner._report_design_coverage()
+
+    assert runner.state.requirement_coverage == "complete"
+    assert "requirement coverage: [green]complete[/green]" in "\n".join(runner._evidence_lines())
