@@ -7,7 +7,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-
 _USER_STORY_HEADER_RE = re.compile(r"^User Story:\s*(.+?)\s*$")
 _USER_STORY_ID_RE = re.compile(r"\bUser Story\s+(\d+)\b", re.IGNORECASE)
 _PAGE_RE = re.compile(r"^Page\s+\d+\s+of\s+\d+\s*$")
@@ -54,7 +53,21 @@ def _extract_pdf_text(pdf_path: Path) -> str:
     return result.stdout
 
 
-def _extract_pdf_story_ids(pdf_path: Path) -> list[str]:
+_HEADER_LINK_RE = re.compile(r'<a href="https://[^"]*/edit/(\d+)"><b>User Story:\s*(.*?)</b></a>', re.DOTALL)
+
+
+def _normalize_story_title(text: str) -> str:
+    return re.sub(r"\s+", " ", text.replace("&amp;", "&").replace("&#39;", "'")).strip()
+
+
+def _extract_pdf_story_headers(pdf_path: Path) -> list[dict[str, str]]:
+    """Work-item id and title of every story header, in document order.
+
+    The bold header link is the only authoritative carrier of a story's own id. The story
+    *text* contains ids too - but those are cross-references to *other* work items, and
+    taking an id from the text is how a placeholder ended up wearing the id of the story it
+    points at, silently deleting its own work item from the index.
+    """
     try:
         result = subprocess.run(
             ["pdftohtml", "-stdout", "-xml", str(pdf_path)],
@@ -64,18 +77,10 @@ def _extract_pdf_story_ids(pdf_path: Path) -> list[str]:
         )
     except (FileNotFoundError, subprocess.CalledProcessError):
         return []
-
-    story_ids: list[str] = []
-    for line in result.stdout.splitlines():
-        if "User Story:" not in line or "href=\"" not in line:
-            continue
-        href_match = re.search(r'href="([^"]+)"', line)
-        if not href_match:
-            continue
-        wi_match = _AZURE_WI_ID_RE.search(href_match.group(1))
-        if wi_match:
-            story_ids.append(f"US-{int(wi_match.group(1)):07d}")
-    return story_ids
+    return [
+        {"user_story_id": f"US-{int(wi):07d}", "title": _normalize_story_title(title)}
+        for wi, title in _HEADER_LINK_RE.findall(result.stdout)
+    ]
 
 
 def _extract_docx_text(docx_path: Path) -> str:
@@ -154,12 +159,11 @@ def _is_cross_reference_stub(item: dict) -> bool:
     return False
 
 
-def _parse_user_stories(text: str, source: Path, story_ids: list[str] | None = None) -> list[dict]:
+def _parse_user_stories(text: str, source: Path, story_headers: list[dict[str, str]] | None = None) -> list[dict]:
     requirements: list[dict] = []
     lines = text.splitlines()
     i = 0
     rid = 1
-    story_index = 0
     page = 1
     source_rel = str(source).replace("\\", "/")
 
@@ -208,55 +212,67 @@ def _parse_user_stories(text: str, source: Path, story_ids: list[str] | None = N
 
         description = _normalize_block_text(description_lines)
         acceptance_criteria = [line.strip() for line in acceptance_lines if line.strip()]
-        # Prefer the id stated in the story text: positional matching against pdftohtml
-        # links also counts table-of-contents links, which shifts every index.
-        user_story_id = _extract_user_story_id(title, description, *acceptance_criteria)
-        if not user_story_id and story_ids and story_index < len(story_ids):
-            user_story_id = story_ids[story_index]
-        story_index += 1
         requirements.append(
             {
                 "req_id": f"R-{rid:03d}",
                 "title": title,
                 "description": description,
                 "acceptance_criteria": acceptance_criteria,
-                "user_story_id": user_story_id,
+                "user_story_id": None,
                 "source": source_rel,
                 "page": story_page,
             }
         )
         rid += 1
 
-    return _merge_cross_reference_stubs(_drop_footer_echoes(requirements))
+    requirements = _drop_footer_echoes(requirements)
+    _assign_story_ids(requirements, story_headers or [])
+    return _annotate_cross_references(requirements)
 
 
-def _merge_cross_reference_stubs(requirements: list[dict]) -> list[dict]:
-    """Fold ``please refer to`` placeholders into the story they point at.
+def _assign_story_ids(requirements: list[dict], headers: list[dict[str, str]]) -> None:
+    """Give every requirement the id of its own story header.
 
-    Keeps the work-item id (and nothing else) from the placeholder. A placeholder whose
-    story is absent from this export is kept, since it is the only record of that need.
+    Matching is monotonic in both lists (document order), with a short look-ahead for
+    headers the text extraction dropped. A title that matches nothing keeps whatever id its
+    own text states and is marked, because a wrong id is worse than a flagged one: a wrong
+    id silently merges two work items' evidence, and nothing downstream can tell.
     """
-    real_by_title: dict[str, dict] = {}
+    cursor = 0
+    for item in requirements:
+        title = _normalize_story_title(item["title"])
+        match_at = None
+        for candidate in range(cursor, min(cursor + 4, len(headers))):
+            if headers[candidate]["title"] == title:
+                match_at = candidate
+                break
+        if match_at is not None:
+            item["user_story_id"] = headers[match_at]["user_story_id"]
+            item["id_source"] = "story-header"
+            cursor = match_at + 1
+        else:
+            item["user_story_id"] = _extract_user_story_id(item["title"], item["description"], *item["acceptance_criteria"])
+            item["id_source"] = "story-text" if item["user_story_id"] else "none"
+            item["id_unmatched"] = True
+
+
+def _annotate_cross_references(requirements: list[dict]) -> list[dict]:
+    """Keep every work item, and record where a placeholder points.
+
+    A story whose whole description is "please refer to User Story 2258143" is still a work
+    item the customer tracks. Folding them away - which an earlier revision did - made 32 of
+    145 work items vanish from the index: content deduplication is fine, identity loss is
+    not. So the record stays, carrying its own id, the literal reference text, and `refers_to`
+    so coverage can follow the pointer instead of inventing evidence.
+    """
     for item in requirements:
         if not _is_cross_reference_stub(item):
-            real_by_title.setdefault(item["title"], item)
-
-    kept: list[dict] = []
-    for item in requirements:
-        if not _is_cross_reference_stub(item):
-            kept.append(item)
             continue
-
-        target = real_by_title.get(item["title"])
-        if target is None:
-            kept.append(item)
-            continue
-        if item["user_story_id"] and not target["user_story_id"]:
-            target["user_story_id"] = item["user_story_id"]
-
-    for index, item in enumerate(kept, 1):
-        item["req_id"] = f"R-{index:03d}"
-    return kept
+        item["origin"] = "reference"
+        target = _extract_user_story_id(item["description"], *item["acceptance_criteria"])
+        if target and target != item["user_story_id"]:
+            item["refers_to"] = target
+    return requirements
 
 
 def _drop_footer_echoes(requirements: list[dict]) -> list[dict]:
@@ -298,7 +314,7 @@ def ingest_prd(docs_root: Path) -> Path:
         if not text:
             continue
         if source.suffix.lower() in _PDF_EXTS:
-            reqs = _parse_user_stories(text, source, story_ids=_extract_pdf_story_ids(source))
+            reqs = _parse_user_stories(text, source, story_headers=_extract_pdf_story_headers(source))
         elif source.suffix.lower() in _DOCX_EXTS:
             reqs = _parse_user_stories(text, source)
         else:
