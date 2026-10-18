@@ -44,6 +44,10 @@ class VerifyResult:
     tool: str = ""
     duration_ms: int = 0
     commands: list[str] = field(default_factory=list)
+    # Per-case verdicts where the stage runs cases (S24). The report (S29) joins
+    # these to requirement IDs; verifiers must not do that join themselves, so a
+    # stage that cannot attribute a result says so by leaving this empty.
+    cases: list[dict] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.stub and self.passed:

@@ -18,6 +18,10 @@ from firmware_agent.slices.S23_Static_Verifier.static_verifier import StaticVeri
 from firmware_agent.slices.S24_Simulator_Verifier.simulator_verifier import (
     SimulatorVerifier,
 )
+from firmware_agent.slices.S29_Test_Report_Output.test_report import (
+    build_report,
+    write_report,
+)
 
 console = Console()
 
@@ -421,58 +425,28 @@ class WorkflowRunner:
             "host-tests": SimulatorVerifier(config, self.project_dir).verify("Workflow host tests"),
             "static-analysis": StaticVerifier().verify("Workflow static analysis"),
         }
-        report_path = self._write_test_report(verdicts)
+        report = build_report(self.project_dir, verdicts)
+        paths = write_report(self.project_dir, report)
 
-        for name, result in verdicts.items():
-            if result.stub:
-                tag = "[magenta]no evidence (stub)[/magenta]"
-            elif result.passed:
-                tag = "[green]PASS[/green]"
-            else:
-                tag = "[red]FAIL[/red]"
-            console.print(f"  {name}: {tag}")
+        for stage in report["stages"]:
+            tag = {"PASS": "[green]PASS[/green]", "FAIL": "[red]FAIL[/red]"}.get(
+                stage["verdict"], "[magenta]no evidence (stub)[/magenta]"
+            )
+            console.print(f"  {stage['name']}: {tag}")
 
-        blocking = {name: result for name, result in verdicts.items() if not result.passed and not result.stub}
-        if blocking:
-            console.print(f"[red]Failed:[/red] {', '.join(blocking)} - see {report_path}")
+        trace = report["traceability"]
+        console.print(f"  traceability: {trace['status']}")
+        if trace["status"] == "not-evaluated":
+            console.print(f"    [yellow]{trace['reason']}[/yellow]")
+
+        if report["failed_stages"]:
+            console.print(f"[red]Failed:[/red] {', '.join(report['failed_stages'])} - see {paths['markdown']}")
             return False
 
-        console.print(f"[green]Test report written:[/green] {report_path}")
-        self.state.test_verdicts = {name: ("stub" if r.stub else "pass") for name, r in verdicts.items()}
+        console.print(f"[green]Test report written:[/green] {paths['markdown']}")
+        self.state.test_verdicts = {stage["name"]: stage["verdict"].lower() for stage in report["stages"]}
         self._advance(WorkflowPhase.DONE)
         return True
-
-    def _write_test_report(self, verdicts: dict) -> Path:
-        report_dir = self.docs_root / "ai-generation" / "reports"
-        report_dir.mkdir(parents=True, exist_ok=True)
-        report_path = report_dir / "workflow_test_report.txt"
-
-        stubs = [name for name, result in verdicts.items() if result.stub]
-        failures = [name for name, result in verdicts.items() if not result.passed and not result.stub]
-        lines = [
-            "Workflow test report",
-            "====================",
-            "",
-            f"Overall: {'FAILED' if failures else 'PASSED'}" + (" (with unverified stages)" if stubs else ""),
-            f"Failed: {', '.join(failures) or 'none'}",
-            f"No evidence (stub): {', '.join(stubs) or 'none'}",
-            "",
-        ]
-        for name, result in verdicts.items():
-            status = "NO EVIDENCE (stub)" if result.stub else ("PASS" if result.passed else "FAIL")
-            lines += [
-                f"[{name}] {status}",
-                f"  tool: {result.tool or 'n/a'}",
-                f"  duration_ms: {result.duration_ms}",
-            ]
-            for command in result.commands:
-                lines.append(f"  $ {command}")
-            if result.output:
-                lines += [f"  {line}" for line in result.output.splitlines()]
-            lines.append("")
-
-        report_path.write_text("\n".join(lines), encoding="utf-8", newline="\n")
-        return report_path
 
     def _interactive_prompt(self, allowed: set[str]) -> None:
         while True:

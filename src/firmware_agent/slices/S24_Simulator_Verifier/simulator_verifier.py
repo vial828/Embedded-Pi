@@ -82,6 +82,7 @@ class SimulatorVerifier:
         tool = self._tool_version(executor, host)
         lines: list[str] = []
         commands: list[str] = []
+        cases: list[dict] = []
         failed = False
 
         for test in tests:
@@ -93,14 +94,20 @@ class SimulatorVerifier:
             build_result = executor.run_command(build, cwd=".", timeout=self.timeout)
             if not build_result.ok:
                 failed = True
+                cases.append({"file": rel_test, "verdict": "BUILD_FAILED", "output": _detail(build_result)})
                 lines.append(f"$ {' '.join(build)}\n  BUILD FAILED exit={build_result.exit_code}\n{_detail(build_result)}")
                 continue
 
             executor.allow_executable(str(binary))
             run = executor.run_command([str(binary)], cwd=".", timeout=self.timeout)
             commands.append(f"{binary} (exit {run.exit_code})")
-            status = "PASS" if run.ok else f"FAIL exit={run.exit_code}{' timed_out' if run.timed_out else ''}"
+            verdict = "PASS" if run.ok else ("TIMEOUT" if run.timed_out else "FAIL")
+            if run.ok or run.timed_out:
+                status = verdict
+            else:
+                status = f"{verdict} exit={run.exit_code}"
             failed = failed or not run.ok
+            cases.append({"file": rel_test, "verdict": verdict, "output": _detail(run)})
             lines.append(f"$ {binary}\n  {status}\n{_detail(run)}".rstrip())
 
         return VerifyResult(
@@ -109,6 +116,7 @@ class SimulatorVerifier:
             tool=tool,
             duration_ms=_elapsed(started),
             commands=commands,
+            cases=cases,
         )
 
     # -------------------------------------------------------------- helpers

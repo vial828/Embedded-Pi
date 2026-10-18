@@ -51,7 +51,7 @@ def add(root: Path, rel: str, body: str) -> None:
 
 
 def report(runner: WorkflowRunner) -> str:
-    return (runner.project_dir / "Docs/ai-generation/reports/workflow_test_report.txt").read_text(encoding="utf-8")
+    return (runner.project_dir / "Docs/ai-generation/reports/test_report.md").read_text(encoding="utf-8")
 
 
 def test_generate_compiles_the_design_and_admits_it_writes_no_code(runner: WorkflowRunner, capsys) -> None:
@@ -73,7 +73,7 @@ def test_test_phase_fails_when_nothing_was_generated(runner: WorkflowRunner) -> 
 def test_report_leads_with_the_stub_list(runner: WorkflowRunner) -> None:
     runner._phase_test()
 
-    head = report(runner).splitlines()[:8]
+    head = report(runner).splitlines()[:10]
     assert any("No evidence (stub)" in line and "static-analysis" in line for line in head), (
         "rule 4 of the stub discipline: the stub list is at the top of the report"
     )
@@ -102,5 +102,5 @@ def test_a_real_passing_suite_completes_the_workflow(runner: WorkflowRunner) -> 
     assert runner._phase_generate() is True
     assert runner._phase_test() is True
     assert runner.state.phase == WorkflowPhase.DONE.value
-    assert runner.state.test_verdicts == {"compile": "pass", "host-tests": "pass", "static-analysis": "stub"}
-    assert "Overall: PASSED (with unverified stages)" in report(runner)
+    assert runner.state.test_verdicts == {"compile": "pass", "host-tests": "pass", "static-analysis": "no_evidence"}
+    assert "**Overall: PASSED** (passed with unverified stages: static-analysis)" in report(runner)

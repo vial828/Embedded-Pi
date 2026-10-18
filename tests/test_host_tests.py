@@ -146,7 +146,8 @@ def test_a_hanging_test_fails_instead_of_hanging_forever(project: Path) -> None:
     result = run(project, timeout=2)
 
     assert result.passed is False
-    assert "timed_out" in result.output
+    assert result.cases[0]["verdict"] == "TIMEOUT"
+    assert "timed out" in result.output
 
 
 @pytest.mark.skipif(GCC is None, reason="needs a host gcc to build and run a test")
