@@ -150,6 +150,35 @@ def assign(requirements: list[dict]) -> dict[str, list[dict]]:
 
 # ------------------------------------------------------------------------ render
 
+# The execution-model question, with every claim tied to a requirement or a pin.
+# Kept as data so a reviewer can disagree with one row instead of the whole section.
+EXECUTION_EVIDENCE: list[tuple[str, str, str]] = [
+    ("FW 若 >2s 未服务，看门狗必须复位系统", "R-091", "活性必须可证明；喂狗不能放在主循环里无条件喂"),
+    ("数据传输期间设备必须保持完全可用", "R-053", "升级/传输不能阻塞加热与 UI——这是 RTOS 唯一真正的论据"),
+    ("充电与会话的优先级「需要被定义」", "R-130", "PRD 要的是一张**优先级/抢占表**，不是调度器"),
+    ("长按 2.5s / 3s / 13s、短按 4s、60s 广播窗口", "R-051 R-122 R-124 R-089", "秒级时间判定：一个 tick 就够，不需要抢占"),
+    ("20ms 广播间隔", "R-049", "发生在 **SS805EX 侧**，不是我们这颗 MCU"),
+    ("360min 充电超时由 CIC 触发后再通知 MCU", "R-128", "长定时器已在充电 IC 上，不需要软件维护"),
+    ("OCP（过流）/ OTP（过热）在 SS805EX 里", "IO-Mapping SS805", "最高优先级的保护**不经过任何软件调度器**"),
+    ("实时记录 intensity / power / TC 温度", "R-075", "采样放定时器 ISR + 环形缓冲，主循环消费"),
+    ("提示可被按钮/BLE 立即打断", "R-081", "事件驱动状态机，而非多任务"),
+]
+
+EXECUTION_LAYERS: list[tuple[str, str, str]] = [
+    ("L0 硬件", "ADC 序列由定时器触发 + DMA；OCP/OTP 在硬件与对端", "确定性不依赖任何软件调度"),
+    ("L1 控制（ISR）", "加热闭环、采样滤波、保护判定", "预算 <100µs；无阻塞、无 OS 调用、无 malloc"),
+    ("L2 业务（协作式主循环）", "显式状态机 + 事件队列 + 显式让出点", "每轮检查活性令牌，满足才喂狗"),
+    ("L3 长任务（分片）", "FOTA 写 flash、日志批量落盘", "分片执行，片间让出——这是对 R-053 的正面回答"),
+]
+
+RTOS_TRIGGERS: list[str] = [
+    "加热闭环需要 >1kHz 且与 flash 写 / BLE 流量并存，实测抖动超预算",
+    "引入自带 OS 依赖的第三方协议栈或安全中间件",
+    "分片让出在实测中仍无法满足 R-053（传输期间 UI 卡顿或控制超时）",
+    "并发状态机数量多到让出点的正确性无法评审（经验阈值：>8 个）",
+]
+
+
 def render(project: str, requirements: list[dict], mcu_pins: list[dict], co_pins: list[dict]) -> str:
     buckets = assign(requirements)
     assigned_count = sum(len(rows) for rows in buckets.values())
@@ -202,7 +231,56 @@ def render(project: str, requirements: list[dict], mcu_pins: list[dict], co_pins
 
     lines += [
         "",
-        "## 2. 模块划分（`module_id` 与 `system-design.md` 的 `MODULE_DESIGN_TABLE` 对齐）",
+        "## 2. 执行模型：`while(1)` 还是 RTOS（本框架最大的空缺）",
+        "",
+        "**建议（待裁，不代裁）**：分层——**控制层不交给 OS，业务层用协作式主循环 + 显式状态机**；",
+        "RTOS 只在下面四个可证伪条件任一成立时引入。",
+        "",
+        "### 2.1 需求里实有的约束（逐条对应）",
+        "",
+        "| 事实 | 来源 | 对执行模型的含义 |",
+        "|---|---|---|",
+    ]
+    for fact, src, implication in EXECUTION_EVIDENCE:
+        lines.append(f"| {fact} | {src} | {implication} |")
+
+    lines += [
+        "",
+        "### 2.2 建议的分层",
+        "",
+        "| 层 | 内容 | 约束 |",
+        "|---|---|---|",
+    ]
+    for layer, content, constraint in EXECUTION_LAYERS:
+        lines.append(f"| {layer} | {content} | {constraint} |")
+
+    lines += [
+        "",
+        "### 2.3 什么时候该换 RTOS（可证伪触发条件）",
+        "",
+    ]
+    for idx, item in enumerate(RTOS_TRIGGERS, 1):
+        lines.append(f"{idx}. {item}")
+
+    lines += [
+        "",
+        "### 2.4 为什么默认不选 RTOS（本项目的理由，不是泛泛之谈）",
+        "",
+        "- **可测性**：现有主机侧测试（`tests/**/*_test.c` + gcc + `assert`）能直接跑状态机；",
+        "  RTOS 化后每块业务都要 OS 移植层或模拟器才能测——现在一行测试都跑不了",
+        "- **可审计**：让出点是**显式**的；抢占把时序耦合藏进优先级数字里",
+        "- **双核是硬件出路**：PSoC6 的 CM0+ 可承担活性/保护监督（R-091），不靠调度器保证",
+        "- **BLE 20ms 不在我们这颗 MCU 上**：最大的硬实时需求本来就在 SS805EX 侧",
+        "",
+        "### 2.5 无论选哪个都要做的一件事",
+        "",
+        "**活性令牌喂狗**：每个关键任务一个 deadline 位，全部满足才喂。",
+        "在主循环里无条件喂狗，恰好会在 R-091 描述的那个场景（FW 已经不服务）把看门狗关掉。",
+        "",
+        "定量阈值（闭环速率、允许抖动）需要 `Docs/hardware/registers/` 与 `datasheet/` 才能定，",
+        "**现在写任何具体频率都是猜**，所以本节不写。",
+        "",
+        "## 3. 模块划分（`module_id` 与 `system-design.md` 的 `MODULE_DESIGN_TABLE` 对齐）",
         "",
         "| module_id | layer | name | responsibility | 硬件/需求依据 |",
         "|---|---|---|---|---|",
@@ -212,7 +290,7 @@ def render(project: str, requirements: list[dict], mcu_pins: list[dict], co_pins
 
     lines += [
         "",
-        "## 3. 需求→模块分配（每条带命中规则）",
+        "## 4. 需求→模块分配（每条带命中规则）",
         "",
         "搬运到 `system-design.md` 时，把 `req_ids` 列按模块合并即可；",
         "不认可的行**删掉**，不要留空——留空会被覆盖检查算成未映射。",
@@ -225,7 +303,7 @@ def render(project: str, requirements: list[dict], mcu_pins: list[dict], co_pins
         ids = ", ".join(row["req_id"] for row in rows)
         lines.append(f"| {module['id']} {module['name']} | {len(rows)} | {ids or '—'} |")
 
-    lines += ["", "### 3.1 逐条依据（可逐行否决）", "", "| req_id | 标题 | 模块 | 命中规则 | 来源 |", "|---|---|---|---|---|"]
+    lines += ["", "### 4.1 逐条依据（可逐行否决）", "", "| req_id | 标题 | 模块 | 命中规则 | 来源 |", "|---|---|---|---|---|"]
     for module in MODULES:
         for row in buckets.get(module["id"], []):
             title = row["title"].replace("|", "/")[:56]
@@ -236,8 +314,9 @@ def render(project: str, requirements: list[dict], mcu_pins: list[dict], co_pins
 
     lines += [
         "",
-        "## 4. 待人裁定（框架不能替人决定的事）",
+        "## 5. 待人裁定（框架不能替人决定的事）",
         "",
+        "0. **执行模型**：承受建议 A（分层 + 协作式主循环）还是直接上 RTOS？（见 §2）",
         "1. **加热安全边界**：谁定超温/超流阈值与响应时间？硬件已把 OCP/OTP 放在 SS805 侧，",
         "   软件侧的限幅与失效策略必须与之一致（缺 datasheet 无法核对门限）。",
         "2. **双核分工**：PSoC6 的 CM4/CM0+ 如何切分（实时加热控制 vs 通信/UI）？",
@@ -246,7 +325,7 @@ def render(project: str, requirements: list[dict], mcu_pins: list[dict], co_pins
         "5. **缺输入**：`Docs/hardware/registers/`、`Docs/hardware/datasheet/`、`Docs/bsp/` 仍为空——",
         "   寄存器初始化表与引脚电气参数无法从 IO-Mapping 推出，不能猜。",
         "",
-        "## 5. 这份草案**没有**做的事",
+        "## 6. 这份草案**没有**做的事",
         "",
         "- 没有生成 `system-design.md`，也没有改它：覆盖检查仍应报 `not-evaluated`",
         "- 没有编造寄存器地址、时钟树或引脚电气参数（缺 datasheet）",
