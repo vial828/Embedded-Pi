@@ -1,4 +1,4 @@
-{"type":"session","version":3,"id":"01a138eb-1dd5-71ad-8d7a-d94c3973ab1d","timestamp":"2026-10-14T05:38:15.126Z","cwd":"C:\\Projects\\Embedded-Pi"}
+{"type":"session","version":3,"id":"01a138eb-1dd5-71ad-8d7a-d94c3973ab1d","timestamp":"2026-10-14T05:38:15.126Z","cwd":"."}
 {"type":"model_change","id":"677ca7ae","parentId":null,"timestamp":"2026-10-14T05:38:15.358Z","provider":"github-copilot","modelId":"gpt-5.4-mini"}
 {"type":"thinking_level_change","id":"4bc3a6bb","parentId":"677ca7ae","timestamp":"2026-10-14T05:38:15.358Z","thinkingLevel":"medium"}
 {"type":"model_change","id":"cfaa1555","parentId":"4bc3a6bb","timestamp":"2026-10-14T05:38:15.370Z","provider":"github-copilot","modelId":"gpt-5.4-mini"}
