@@ -1,6 +1,12 @@
 project:
   name: "sample-stm32"
 
+mcu:
+  part: "STM32F407VGT6"
+
+toolchain:
+  compiler: "arm-none-eabi-gcc"
+
 context:
   max_tokens: 3000
   constitution_file: "./standards/constitution.md"

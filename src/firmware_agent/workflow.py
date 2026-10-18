@@ -8,6 +8,7 @@ from pathlib import Path
 
 from rich.console import Console
 
+from firmware_agent.config import load_project_config
 from firmware_agent.slices.S07_Compiler.compiler import compile_system_design
 from firmware_agent.slices.S09_PRD_Ingestion.prd_ingestion import ingest_prd
 
@@ -33,6 +34,10 @@ class WorkflowState:
     # Required inputs the current run was explicitly allowed to proceed without.
     # Persisted so a state file cannot look like a gated run when it was waived.
     waived_missing: list[str] = field(default_factory=list)
+    # Which authority granted the waiver: "cli" (--allow-missing) or "config"
+    # (gate.allow_missing_inputs). A waiver nobody claims is indistinguishable
+    # from a bug that skipped the gate.
+    waived_by: str = ""
 
 
 class WorkflowRunner:
@@ -43,6 +48,7 @@ class WorkflowRunner:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state = self.load_state()
         self.allow_missing = allow_missing
+        self._config = None
 
     def load_state(self) -> WorkflowState:
         if self.state_path.exists():
@@ -106,8 +112,8 @@ class WorkflowRunner:
         console.clear()
         console.print(self._status_bar())
         if self.state.waived_missing:
-            console.print(f"[magenta]Gate waived:[/magenta] {len(self.state.waived_missing)} required input(s) "
-                          f"missing but accepted this run")
+            console.print(f"[magenta]Gate waived[/magenta] by {self.state.waived_by or 'unknown authority'}: "
+                          f"{len(self.state.waived_missing)} required input(s) missing but accepted this run")
         console.print("[bold cyan]Roadmap[/bold cyan]")
         for idx, line in enumerate(self._roadmap_lines(), 1):
             if self._roadmap_stage_active(idx):
@@ -217,27 +223,63 @@ class WorkflowRunner:
         """Missing inputs that still block this run, i.e. not covered by a waiver."""
         return [m for m in self._missing_required_paths() if m not in self.state.waived_missing]
 
+    def _project_config(self):
+        if self._config is None:
+            self._config = load_project_config(self.project_dir)
+        return self._config
+
+    def _report_config_state(self) -> None:
+        """Say out loud what the configuration actually is before doing any work."""
+        cfg = self._project_config()
+        if cfg.is_template:
+            console.print(
+                f"[yellow]Configuration is still the generated template[/yellow] ({cfg.source_path}): "
+                "project / mcu / toolchain values are placeholders. Edit them, then delete the "
+                "`template: true` line."
+            )
+        if not cfg.compiler_exists():
+            console.print(
+                f"[yellow]Configured compiler is not reachable:[/yellow] {cfg.toolchain.compiler} "
+                "- generate will fail until it is installed or toolchain.compiler is corrected."
+            )
+
+    def _waiver_authority(self) -> str:
+        """Who lets this run past the gate: "cli", "config", or "" for nobody."""
+        if self.allow_missing:
+            return "cli"
+        if self._project_config().gate.allow_missing_inputs:
+            return "config"
+        return ""
+
     def _apply_missing_waiver(self) -> None:
         """Grant or expire the gate waiver for this run.
 
-        A waiver is granted per invocation and never silently carries over: the
-        flag has to be passed again. Otherwise one --allow-missing run would arm
-        the bypass for every later run, which is the silent-fallback failure mode
-        this gate is supposed to prevent.
+        A --allow-missing waiver is granted per invocation and never silently
+        carries over: one run with the flag must not arm the bypass for every
+        later run, which is the silent-fallback failure mode this gate exists to
+        stop. A config waiver (gate.allow_missing_inputs: true) is persistent on
+        purpose - it is a checked-in project decision - so it is reported with
+        the file it came from.
         """
         missing = self._missing_required_paths()
-        if not self.allow_missing:
+        authority = self._waiver_authority()
+        if not authority:
             if self.state.waived_missing:
                 console.print("[dim]Previous waiver expired. Rerun with --allow-missing to waive again.[/dim]")
                 self.state.waived_missing = []
+                self.state.waived_by = ""
+                self.state.notes = ""
                 self.save_state()
             return
         if not missing:
             return
         self.state.waived_missing = sorted(set(self.state.waived_missing) | set(missing))
-        self.state.notes = "external input gate waived with --allow-missing"
+        self.state.waived_by = authority
+        self.state.notes = f"external input gate waived by {authority}"
         self.save_state()
-        console.print("[magenta]External input gate WAIVED (--allow-missing).[/magenta] Proceeding without:")
+        reason = "--allow-missing (this run only)" if authority == "cli" else \
+            f"gate.allow_missing_inputs in {self._project_config().source_path} (persistent)"
+        console.print(f"[magenta]External input gate WAIVED[/magenta] via {reason}. Proceeding without:")
         for item in missing:
             console.print(f"  - {item}")
         console.print("[dim]Downstream artifacts from this run are not fully sourced; "
@@ -279,6 +321,7 @@ class WorkflowRunner:
 
     def run(self) -> None:
         self._print_banner("EPI Workflow MVP")
+        self._report_config_state()
         self._apply_missing_waiver()
         self._pin_to_external_gate_if_needed()
         self._show_status()

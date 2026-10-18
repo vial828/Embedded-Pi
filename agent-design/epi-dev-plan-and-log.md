@@ -21,6 +21,7 @@
 
 | 日期 | 变更 |
 |---|---|
+| 2026-10-18 | **P0-2 完成**：S03 配置加载落地 —— 必需项不得默用默认、模板来源记为事实（`template: true`）、门禁开关入配置。见 §7 |
 | 2026-10-18 | **P0-1 完成**：门禁改为显式豁免 `--allow-missing`，豁免记录进 `state.json`、逐次失效不继承；回退不再静默。见 §7 |
 | 2026-10-13 | **计划变更：工作流优先**。PRD 解析冻结在"宪法合规的最小归一化"；优先打通 PRD→架构→生成→编译→测试。昨天定稿的深度解析方案降级为 §5 **伏笔**，是否采用取决于届时讨论 |
 | 2026-10-13 | 生成物被反复清空已修（`9c0dd11`）；PRD 解析质量已修（`5d94bc6`，176→116 条） |
@@ -62,13 +63,13 @@
 
 | 状态 | 切片 |
 |---|---|
-| ✅ 有实现 | S02 布局(260) S09 PRD(330) S05 解析(122) S15 晋升(75) S13 长记忆(96) S06 校验(71) S16 召回(48) S07 编译(46) S11 图(43) |
+| ✅ 有实现 | S02 布局(260) S09 PRD(330) S05 解析(122) S15 晋升(75) S13 长记忆(96) S06 校验(71) S03 配置(283) S16 召回(48) S07 编译(46) S11 图(43) |
 | 🟡 桩 | S20 LLM 客户端（返回 `[stub]`）S21 执行器（只有 `write_text`）S22/S23/S24 校验器（**`passed=True` 硬编码**）S25 分类（关键词）S26 重试（集合判断）S12 S14 S17 S18 S19 |
-| ❌ **零代码，只有 README** | **S03 配置** **S04 系统架构生成** **S27 追溯输出** **S28 决策日志** **S29 测试报告** **S30 质量门** **S31 CI 矩阵** |
+| ❌ **零代码，只有 README** | **S04 系统架构生成** **S27 追溯输出** **S28 决策日志** **S29 测试报告** **S30 质量门** **S31 CI 矩阵** |
 
 **工作流缺口 = S04 + S20 + S21 + S22 + S24 + S29 + S30。** 其余属于质量打磨。
 
-### 2.3 门禁为什么卡死（P0 必修）
+### 2.3 门禁为什么卡死（P0 必修 → **已解**：P0-1 显式豁免 + P0-2 provenance）
 
 `workflow.py:_has_min_content()` 三条判据，任一不满足即视为"缺文件"：① < 20 字符；② 含 `template`/`todo`/`placeholder`/**`n/a`**；③ `Docs/prd` 下还须含 `User Story`/`Acceptance Criteria`/`Description`。
 
@@ -84,7 +85,7 @@
 | # | 工作项 | 目标 | 验收 | 依赖 |
 |---|---|---|---|---|
 | **P0-1** ✅ | 门禁改为**显式可跳过 + 报告** | 缺输入时打印缺什么，允许 `--allow-missing` 继续；不再静默回退状态 | demo 项目能走到 `ingest` 并产出 116 条 | — |
-| **P0-2** | S03 配置加载（最小） | 读 `config/*.yaml`，暴露 toolchain 路径、provider、门禁开关 | 配置缺失时明确报错，不默用默认 | — |
+| **P0-2** ✅ | S03 配置加载（最小） | 读 `config/*.yaml`，暴露 toolchain 路径、provider、门禁开关 | 配置缺失时明确报错，不默用默认 | — |
 | **P0-3** | **S04 需求→架构（最小）** | 从 `requirements_index.json` 填 `MODULE_DESIGN_TABLE` / `TASK_TABLE` 的 `req_ids`（当前全 `N/A`） | 每条需求至少挂到一个 module；未挂的进 `unassigned` 并告警 | P0-1 |
 | **P0-4** | **S20 真 LLM 客户端** | 单一 provider、可关、`temperature=0`、请求/响应全量落盘 | 同输入同输出；断网时报错而非返回 `[stub]` | P0-2 |
 | **P0-5** | **S21 执行器扩展** | `write_text` + `run_command(cwd, timeout)`，动作全量追加日志 | 能写 `src/` 并跑一条命令 | P0-2 |
@@ -278,6 +279,27 @@ class QualityGate:
 ---
 
 ## 7. 工作日志（只追加，最新在上）
+
+### 2026-10-18 · P0-2 S03 配置加载
+
+**规范冲突与解法**（P0-2 要求「缺失明确报错、不默用默认」，但 `Docs/config.yaml` 是 S02 自产模板，占位值看起来像真值）：
+
+- 只校「字段在不在」= 假严格；校「值真不真」= 新项目直接卡死（就是 P0-1 刚解掉的死结）
+- 解法：**把「还是模板吗」变成记录的事实**，S02 生成时写 `template: true`，S03 读这个标记 → `is_template`。不是内容猜测，与 §2.3 那套关键字嗅探划清界线
+- 结果：严格校验与脚手架共存 —— 报告「结构合法但尚未配置」，而不是假装占位值是用户的选择
+
+**必需项清单**（`REQUIRED_KEYS`，每项带「为什么不能默认」的理由，报错时一并打印）：`project.name`、`mcu.part`、`toolchain.compiler`、`llm.provider`、`llm.model`。其余（token 预算、paths、gate）允许默认，因为它们改变的是成本，不是「产出什么」
+
+- `extra="forbid"` + 必需项前置校验：拼错的键会被点名（`llm.provder looks like a typo for llm.provider`）；pydantic 原生的「应该是字典」消息在整节为空时不可用，所以自己走一遍必需项
+- **`llm.provider` 白名单**：未知 provider 在加载期失败。静默回退等于把项目源码发给没人选的模型
+- **paths 必须项目相对**：两台机器（Windows/Linux）编辑同一项目，绝对路径只在其中一台能用
+- **`objcopy` 由编译器派生**（同目录同前缀），非 gcc 形态则要求显式配置并报错 —— 派生不出来的东西不能瞎猜
+- **门禁开关入配置**：`gate.allow_missing_inputs`（默认 `false`，门禁不可能默认敞开）。与 P0-1 的 `--allow-missing` 区别是**权威来源**：配置里的豁免是提交进版本库的项目决定（持久），命令行是临时绕过（逐次失效）。`state.json` 新增 `waived_by: cli|config` 记录是谁豁免的
+- 结构：实现在 `slices/S03_Config_Loading_and_Validation/config.py`，顶层 `config.py` 退化为 `import *` 转发（沿用 S02 的切片约定），`agent.py`/S17 的旧导入不变
+- 模板新增注释掉的 `gate:` 块（安全开关要能被看见），并提示「改完删掉 `template: true`」
+- `tests/test_config.py` 15 条 + 工作流门禁 7 条，全套 **67 passed**；实测消息：`toolchain.compiler: required value missing - a default compiles with a toolchain nobody selected`
+- **待确认（方向层）**：计划里写的是读 `config/*.yaml`（目录式多文件），实际布局契约是单一 `Docs/config.yaml`。我按后者实现并把 `config.yaml` 作为兼容位置；若真要拆成 `config/toolchain.yaml` 等，那是 S02 布局契约变更，需同步 constitution 与切片大图
+- 遗留风险：`agent.py`（旧 `--run` 路径）现在也会因缺必需项而报错。它不在 P0 序列里，但严格化的代价就是旧路径同样严格 —— 这是刻意的
 
 ### 2026-10-18 · P0-1 门禁显式豁免
 
