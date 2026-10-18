@@ -188,6 +188,15 @@ class GateConfig(_StrictModel):
         default=False,
         description="Persistent waiver for missing external inputs. Off by default: a gate must never be open by default.",
     )
+    min_requirement_coverage: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of requirements that must have a declared test. "
+        "Unset means the coverage rule is not judged - reported as not-configured, "
+        "never as satisfied, because a default threshold would be this project "
+        "inventing a quality bar the customer never set.",
+    )
 
 
 class AppConfig(_StrictModel):

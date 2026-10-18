@@ -22,6 +22,10 @@ from firmware_agent.slices.S29_Test_Report_Output.test_report import (
     build_report,
     write_report,
 )
+from firmware_agent.slices.S30_Quality_Gates.quality_gate import (
+    evaluate,
+    write_gate_result,
+)
 
 console = Console()
 
@@ -51,6 +55,8 @@ class WorkflowState:
     waived_by: str = ""
     # Last test-phase verdicts, so `status` and S30 can see what evidence existed.
     test_verdicts: dict[str, str] = field(default_factory=dict)
+    # S30's certification for the last run: accepted | rejected | "" (never judged).
+    quality_gate: str = ""
 
 
 class WorkflowRunner:
@@ -438,6 +444,18 @@ class WorkflowRunner:
         console.print(f"  traceability: {trace['status']}")
         if trace["status"] == "not-evaluated":
             console.print(f"    [yellow]{trace['reason']}[/yellow]")
+
+        gate = evaluate(report, min_requirement_coverage=config.gate.min_requirement_coverage)
+        gate_path = write_gate_result(self.project_dir, gate, report)
+        if gate.accepted:
+            console.print("[green]Quality gate: ACCEPTED[/green]")
+        else:
+            console.print(f"[red]Quality gate: REJECTED[/red] - this run is not certified. {gate_path}")
+            for reason in gate.reasons:
+                console.print(f"    [red]{reason['rule']}[/red]: {reason['detail']}")
+        for item in gate.not_judged:
+            console.print(f"    [yellow]{item['rule']} not judged[/yellow]: {item['reason']}")
+        self.state.quality_gate = gate.verdict
 
         if report["failed_stages"]:
             console.print(f"[red]Failed:[/red] {', '.join(report['failed_stages'])} - see {paths['markdown']}")

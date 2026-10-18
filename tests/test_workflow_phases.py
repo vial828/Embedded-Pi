@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -89,6 +90,29 @@ def test_a_real_failing_case_fails_the_phase(runner: WorkflowRunner) -> None:
     assert runner._phase_test() is False
     assert runner.state.phase == WorkflowPhase.TEST.value, "a failed phase does not advance"
     assert "Assertion" in report(runner)
+
+
+@pytest.mark.skipif(GCC is None, reason="needs a host gcc to build and run a test")
+def test_a_stub_denies_certification_without_halting_the_run(runner: WorkflowRunner) -> None:
+    """S30 semantics: `rejected` means not certified, not stopped.
+
+    If rejection blocked the workflow while S23 is a stub, the only way to finish
+    would be to remove the gate - the exact pressure that turns gates into
+    decoration. So the verdict is recorded and CI fails on it.
+    """
+    root = runner.project_dir
+    add(root, "include/answer.h", HEADER)
+    add(root, "src/answer.c", SOURCE)
+    add(root, "tests/answer_test.c", PASSING_TEST)
+
+    assert runner._phase_test() is True
+    assert runner.state.quality_gate == "rejected"
+
+    gate = json.loads((root / "Docs/ai-generation/reports/quality_gate.json").read_text(encoding="utf-8"))
+    assert [r["rule"] for r in gate["reasons"]] == ["no-stub-participation", "traceability-complete"], (
+        "the stub and the un-ingested PRD are two independent reasons, both listed"
+    )
+    assert gate["judged_overall"] == "PASSED", "the run passed and is still not certified"
 
 
 @pytest.mark.skipif(GCC is None, reason="needs a host gcc to build and run a test")
