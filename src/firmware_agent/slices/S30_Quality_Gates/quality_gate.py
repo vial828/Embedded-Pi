@@ -11,6 +11,7 @@ reviewer would have no way to tell which one was lying.
 | `no-stub-participation` | any stage produced no evidence (stub) |
 | `no-failed-stage` | any stage failed |
 | `traceability-complete` | a trace link is malformed or unknown, **or** traceability was not evaluated |
+| `architecture-coverage` | requirements the reviewed architecture does not map, **or** coverage was not evaluated |
 | `requirement-coverage` | coverage below `gate.min_requirement_coverage` - only when configured |
 
 `no-stub-participation` is the headline rule of this project: a run where a
@@ -90,6 +91,25 @@ def evaluate(report: dict[str, Any], *, min_requirement_coverage: float | None =
             }
         )
 
+    arch = report.get("design_coverage") or {"status": "not-evaluated", "reason": "report carries no design coverage section"}
+    if arch["status"] == "complete":
+        pass
+    elif arch["status"] == "incomplete":
+        unassigned = arch.get("unassigned", [])
+        shown = ", ".join(unassigned[:8]) + (f", ... ({len(unassigned)} total)" if len(unassigned) > 8 else "")
+        reasons.append(
+            {
+                "rule": "architecture-coverage",
+                "detail": f"{len(unassigned)} requirement(s) unmapped"
+                + (f": {shown}" if shown else "")
+                + _coverage_extra(arch),
+            }
+        )
+    else:
+        reasons.append(
+            {"rule": "architecture-coverage", "detail": f"architecture coverage not evaluated: {arch.get('reason', 'unknown')}"}
+        )
+
     coverage = _coverage(report)
     if min_requirement_coverage is None:
         not_judged.append(
@@ -117,10 +137,18 @@ def evaluate(report: dict[str, Any], *, min_requirement_coverage: float | None =
             "failed_stages": failed,
             "stub_stages": stubs,
             "traceability": trace["status"],
+            "architecture_coverage": (report.get("design_coverage") or {}).get("status", "not-evaluated"),
             "requirement_coverage": coverage,
             "min_requirement_coverage": min_requirement_coverage,
         },
     )
+
+
+def _coverage_extra(coverage: dict[str, Any]) -> str:
+    unknown = coverage.get("unknown_refs", [])
+    if not unknown:
+        return ""
+    return f"; {len(unknown)} broken design reference(s)"
 
 
 def _coverage(report: dict[str, Any]) -> float | None:

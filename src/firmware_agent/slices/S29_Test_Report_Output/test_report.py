@@ -101,8 +101,14 @@ def load_requirements_index(project_root: Path) -> tuple[list[dict[str, Any]], s
     return requirements, None
 
 
-def build_report(project_root: Path, verdicts: dict[str, Any]) -> dict[str, Any]:
-    """Assemble the report dictionary. Deterministic: same inputs, same bytes."""
+def build_report(project_root: Path, verdicts: dict[str, Any], design_coverage: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Assemble the report dictionary. Deterministic: same inputs, same bytes.
+
+    `design_coverage` is passed in rather than imported from S04: S04 already reads
+    this module's requirements loader, and a report that reached back into the
+    slice that reads it would be a cycle - and a report with opinions about the
+    design it is supposed to only record.
+    """
     requirements, unavailable_reason = load_requirements_index(project_root)
     known_ids = {item.get("req_id") for item in requirements}
     links = extract_requires_links(project_root)
@@ -152,7 +158,15 @@ def build_report(project_root: Path, verdicts: dict[str, Any]) -> dict[str, Any]
             for item in requirements
         ],
         "traceability": _traceability(links, malformed, unknown, requirements, unavailable_reason),
+        "design_coverage": _design_coverage(design_coverage),
     }
+
+
+def _design_coverage(coverage: dict[str, Any] | None) -> dict[str, Any]:
+    """A section that was never computed is `not-evaluated`, never `complete`."""
+    if coverage is None:
+        return {"status": "not-evaluated", "reason": "caller did not run the architecture coverage check"}
+    return coverage
 
 
 def _overall_note(failed: list[str], stubs: list[str]) -> str:
@@ -200,6 +214,32 @@ def write_report(project_root: Path, report: dict[str, Any]) -> dict[str, Path]:
     return {"json": json_path, "markdown": markdown_path}
 
 
+def _design_coverage_lines(coverage: dict[str, Any] | None) -> list[str]:
+    if not coverage or coverage.get("status") == "not-evaluated":
+        reason = (coverage or {}).get("reason", "coverage was not computed")
+        return [f"- not evaluated: {reason}"]
+
+    lines = [
+        f"- status: {coverage['status']}",
+        f"- requirements: {coverage.get('requirements_total', 'n/a')}",
+    ]
+    if coverage.get("reason"):
+        lines.append(f"- note: {coverage['reason']}")
+    unassigned = coverage.get("unassigned", [])
+    lines.append(f"- unmapped: {len(unassigned)}" + (f" ({', '.join(unassigned)})" if unassigned else ""))
+    unknown = coverage.get("unknown_refs", [])
+    lines.append(f"- broken design references: {len(unknown)}")
+    for ref in unknown:
+        claimant = ref.get("claimant", ref.get("section"))
+        lines.append(f"  - {claimant} -> {ref.get('declared', ref.get('problem'))}")
+    assigned = coverage.get("assigned", {})
+    if assigned:
+        lines += ["", "| requirement | architecture |", "|---|---|"]
+        for req_id, claims in assigned.items():
+            lines.append(f"| {req_id} | {', '.join(claims)} |")
+    return lines
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     trace = report["traceability"]
     lines = [
@@ -232,6 +272,9 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.append(f"| {item['req_id']} | {item['status']} | {', '.join(item['tests']) or '-'} |")
     else:
         lines.append(f"No requirements: {trace.get('reason', 'index empty')}.")
+
+    lines += ["", "## Requirement → architecture", ""]
+    lines += _design_coverage_lines(report.get("design_coverage"))
 
     lines += ["", "## Traceability detail", ""]
     if trace["status"] == "not-evaluated":

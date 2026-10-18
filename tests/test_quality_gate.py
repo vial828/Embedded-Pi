@@ -34,6 +34,15 @@ CLEAN_REPORT = {
         "malformed_links": [],
         "unknown_ids": [],
     },
+    "design_coverage": {
+        "status": "complete",
+        "reason": "",
+        "requirements_total": 1,
+        "assigned": {"R-001": ["module:MOD-001"]},
+        "unassigned": [],
+        "unknown_refs": [],
+        "placeholder_rows": 0,
+    },
 }
 
 
@@ -110,6 +119,60 @@ def test_a_broken_trace_denies_certification(malformed: list, unknown: list) -> 
 
     assert verdict.verdict == "rejected"
     assert verdict.rule_names == ["traceability-complete"]
+
+
+# -------------------------------------------------------- architecture coverage
+
+
+def test_unmapped_requirements_deny_certification() -> None:
+    verdict = evaluate(
+        report(
+            design_coverage={
+                "status": "incomplete",
+                "reason": "",
+                "requirements_total": 2,
+                "assigned": {"R-001": ["module:MOD-001"]},
+                "unassigned": ["R-002"],
+                "unknown_refs": [],
+            }
+        )
+    )
+
+    assert verdict.verdict == "rejected"
+    assert "R-002" in verdict.reasons[0]["detail"]
+
+
+def test_unevaluated_architecture_coverage_denies_certification() -> None:
+    verdict = evaluate(report(design_coverage={"status": "not-evaluated", "reason": "still the generated template"}))
+
+    assert verdict.rule_names == ["architecture-coverage"]
+    assert "still the generated template" in verdict.reasons[0]["detail"]
+
+
+def test_a_report_without_a_coverage_section_is_not_a_pass() -> None:
+    built = report()
+    del built["design_coverage"]
+
+    verdict = evaluate(built)
+
+    assert verdict.verdict == "rejected"
+    assert "no design coverage section" in verdict.reasons[0]["detail"]
+
+
+def test_broken_design_references_are_named_in_the_reason() -> None:
+    verdict = evaluate(
+        report(
+            design_coverage={
+                "status": "incomplete",
+                "requirements_total": 1,
+                "assigned": {},
+                "unassigned": ["R-001"],
+                "unknown_refs": [{"section": "MODULE_DESIGN_TABLE", "claimant": "module:MOD-001", "declared": "R-999"}],
+            }
+        )
+    )
+
+    assert "1 broken design reference(s)" in verdict.reasons[0]["detail"]
 
 
 # ------------------------------------------------------------------- coverage

@@ -41,6 +41,18 @@ Every stage row carries `n/a (whole-project gate)` in the requirements column. A
 whole-build compile verdict is not evidence about one requirement, and inventing
 that association would be the report's own inference.
 
+## `design_coverage`: the architecture half of the trace
+
+`build_report(root, verdicts, design_coverage)` takes the S04 coverage dictionary
+as an argument. S04 is not imported here: S04 already reads this module's
+requirements loader, so reaching back would be a cycle - and a report should record
+the design, not form opinions about it.
+
+The section is always present. A caller that never ran the check gets
+`{"status": "not-evaluated", "reason": "caller did not run the architecture
+coverage check"}`, because a section that silently goes missing reads as "nothing to
+report". S30 turns `incomplete` and `not-evaluated` both into rejections.
+
 ## Determinism
 
 The markdown is rendered from the same dictionary as the JSON, so the two cannot

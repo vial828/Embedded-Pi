@@ -205,3 +205,58 @@ def test_the_same_inputs_produce_the_same_bytes(project: Path) -> None:
 
     assert first["json"].read_bytes() == second["json"].read_bytes()
     assert first["markdown"].read_bytes() == second["markdown"].read_bytes()
+
+
+# ------------------------------------------------------- architecture coverage
+
+
+COVERAGE = {
+    "schema": "epi.requirement-coverage/1",
+    "status": "incomplete",
+    "reason": "",
+    "requirements_total": 2,
+    "assigned": {"R-001": ["module:MOD-001"]},
+    "unassigned": ["R-002"],
+    "unknown_refs": [{"section": "MODULE_DESIGN_TABLE", "claimant": "module:MOD-002", "declared": "R-999"}],
+    "placeholder_rows": 1,
+}
+
+
+def test_a_report_always_carries_a_coverage_section(project: Path) -> None:
+    """Absent is not the same as fine: the section exists and says it was not computed."""
+    index(project)
+
+    built = build_report(project, verdicts())
+
+    assert built["design_coverage"]["status"] == "not-evaluated"
+    assert "caller did not run" in built["design_coverage"]["reason"]
+
+
+def test_the_coverage_passed_in_lands_in_json_and_markdown(project: Path) -> None:
+    index(project)
+
+    built = build_report(project, verdicts(), COVERAGE)
+    markdown = render_markdown(built)
+
+    assert built["design_coverage"]["unassigned"] == ["R-002"]
+    assert "## Requirement → architecture" in markdown
+    assert "unmapped: 1 (R-002)" in markdown
+    assert "module:MOD-002 -> R-999" in markdown
+    assert "| R-001 | module:MOD-001 |" in markdown
+
+
+def test_an_unevaluated_coverage_renders_the_reason(project: Path) -> None:
+    index(project)
+
+    built = build_report(project, verdicts(), {"status": "not-evaluated", "reason": "still the generated template"})
+
+    assert "not evaluated: still the generated template" in render_markdown(built)
+
+
+def test_the_coverage_section_is_written_to_disk(project: Path) -> None:
+    index(project)
+
+    paths = write_report(project, build_report(project, verdicts(), COVERAGE))
+
+    payload = json.loads(paths["json"].read_text(encoding="utf-8"))
+    assert payload["design_coverage"]["status"] == "incomplete"

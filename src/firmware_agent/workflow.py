@@ -493,7 +493,7 @@ class WorkflowRunner:
             "host-tests": SimulatorVerifier(config, self.project_dir).verify("Workflow host tests"),
             "static-analysis": StaticVerifier().verify("Workflow static analysis"),
         }
-        report = build_report(self.project_dir, verdicts)
+        report = build_report(self.project_dir, verdicts, check_project(self.project_dir).as_dict())
         paths = write_report(self.project_dir, report)
 
         for stage in report["stages"]:

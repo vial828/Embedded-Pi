@@ -109,9 +109,11 @@ def test_a_stub_denies_certification_without_halting_the_run(runner: WorkflowRun
     assert runner.state.quality_gate == "rejected"
 
     gate = json.loads((root / "Docs/ai-generation/reports/quality_gate.json").read_text(encoding="utf-8"))
-    assert [r["rule"] for r in gate["reasons"]] == ["no-stub-participation", "traceability-complete"], (
-        "the stub and the un-ingested PRD are two independent reasons, both listed"
-    )
+    assert [r["rule"] for r in gate["reasons"]] == [
+        "no-stub-participation",
+        "traceability-complete",
+        "architecture-coverage",
+    ], "stub, un-ingested PRD and untouched design are three independent reasons, all listed"
     assert gate["judged_overall"] == "PASSED", "the run passed and is still not certified"
 
 

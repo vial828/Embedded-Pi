@@ -21,12 +21,20 @@ evaluate(report, min_requirement_coverage=config.gate.min_requirement_coverage)
 |---|---|
 | `no-stub-participation` | any stage produced no evidence (stub) |
 | `no-failed-stage` | any stage failed |
+| `architecture-coverage` | requirements the reviewed architecture does not map, **or** coverage was not evaluated |
 | `traceability-complete` | a trace link is malformed or unknown, **or** traceability was `not-evaluated` |
 | `requirement-coverage` | coverage below `gate.min_requirement_coverage` - only when configured |
 
 `no-stub-participation` is the headline rule of this project: a run in which a
 verifier was a stub cannot be certified, however green the other stages look. A
 stub is an absence of evidence, and absences are what audits exist to catch.
+
+`architecture-coverage` is the same argument one level up. A project whose design
+document is still the generated template has an architecture that maps nothing, so
+the run cannot be certified either - "the tests pass" says nothing about whether
+the design accounts for the requirements. Note this is the gate judging a
+*coverage report*, not the gate holding an opinion about design quality: it reads
+`design_coverage` from the report and reports the reason it was given.
 
 ## `rejected` means "not certified", not "stop"
 

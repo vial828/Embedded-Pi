@@ -35,20 +35,27 @@ records the status in `state.json`. A warning, not a gate - see below.
   reported with its claimant (`module:MOD-001`); dropping it would turn a broken
   trace into a clean report.
 
-## Open ruling (blocks the rest of P0-3)
+## Manifest source: implemented as B, pending confirmation
 
-Where the module manifest lives is undecided: **A** a human-authored
+Where the module manifest lives was undecided (**A** a human-authored
 `module-design.md`, **B** `system-design.md` stays the sole source and S04 only
-checks coverage, **C** a new `config/architecture.yaml`.
+checks coverage, **C** a new `config/architecture.yaml`).
 
-Evidence so far favours **B**: the canonical schema *already* has `req_ids` on
-module/task/interface rows and a `TRACEABILITY_LINKS` section, S06 already
-validates those IDs, and the workflow already has a human review gate
-(`wait_for_design_review`) which is where a person fills the table in. Option A
-would give one fact two homes.
+The code ships **B**, because the evidence points there and idling helps nobody:
+the canonical schema *already* has `req_ids` on module/task/interface rows and a
+`TRACEABILITY_LINKS` section, S06 already validates those IDs, and the workflow
+already has a human review gate (`wait_for_design_review`) which is where a person
+fills the table in. Option A would give one fact two homes.
 
-`evaluate_coverage(requirements, design)` is source-agnostic; `check_project` is
-the adapter. If the ruling goes to A or C, only the adapter changes.
+This is reversible by construction, not by refactor: `evaluate_coverage(requirements,
+design)` is source-agnostic and `check_project` is the only function that knows where
+the rows come from. If the ruling goes to A or C, `check_project` is replaced and
+nothing else moves - including the S30 rule, which reads the coverage report rather
+than the design document.
+
+The gate consequence is `architecture-coverage` in S30: an architecture that maps
+nothing cannot certify a run, which is the same reasoning as refusing to certify one
+where a verifier was a stub.
 
 ## Not here
 
