@@ -1,0 +1,294 @@
+........................................................................ [ 52%]
+.................................................................        [100%]
+137 passed in 8.42s
+F841 Local variable `selected_source` is assigned to but never used
+   --> src/firmware_agent/slices/S09_PRD_Ingestion/prd_ingestion.py:322:13
+    |
+320 |                 rid += 1
+321 |         if reqs:
+322 |             selected_source = source
+    |             ^^^^^^^^^^^^^^^
+323 |             break
+    |
+help: Remove assignment to unused variable `selected_source`
+    |
+321 |         if reqs:
+    -             selected_source = source
+322 |             break
+    |
+note: This is an unsafe fix and may change runtime behavior
+
+BLE001 Do not catch blind exception: `Exception`
+  --> src/firmware_agent/slices/S10_REGS_Ingestion/regs_ingestion.py:18:20
+   |
+16 |             try:
+17 |                 data = json.loads(p.read_text(encoding="utf-8") or "{}")
+18 |             except Exception:
+   |                    ^^^^^^^^^
+19 |                 data = {}
+20 |             items.append(
+   |
+
+C414 Unnecessary `list()` call within `sorted()`
+  --> src/firmware_agent/slices/S10_REGS_Ingestion/regs_ingestion.py:25:29
+   |
+23 |                     "source_id": f"REGSRC-{idx:03d}",
+24 |                     "file": str(p).replace("\\", "/"),
+25 |                     "keys": sorted(list(data.keys())) if isinstance(data, dict) else [],
+   |                             ^^^^^^^^^^^^^^^^^^^^^^^^^
+26 |                 }
+27 |             )
+   |
+help: Remove the inner `list()` call
+   |
+24 |                     "file": str(p).replace("\\", "/"),
+   -                     "keys": sorted(list(data.keys())) if isinstance(data, dict) else [],
+25 +                     "keys": sorted(data.keys()) if isinstance(data, dict) else [],
+26 |                 }
+   |
+note: This is an unsafe fix and may change runtime behavior
+
+RUF012 Mutable default value for class attribute
+  --> src/firmware_agent/slices/S15_Promotion_Rule_Engine/promotion_rule_engine.py:21:25
+   |
+19 |       """Deterministic promotion engine: LLM can propose, engine decides."""
+20 |
+21 |       HIGH_RISK_SIGNALS = {
+   |  _________________________^
+22 | |         "compile_error",
+23 | |         "link_error",
+24 | |         "runtime_crash",
+25 | |         "behavior_error",
+26 | |         "static_analysis_error",
+27 | |         "hil_fail",
+28 | |     }
+   | |_____^
+29 |
+30 |       def __init__(self, docs_root: Path):
+   |
+help: Consider initializing in `__init__` or annotating with `typing.ClassVar`
+
+RUF012 Mutable default value for class attribute
+  --> src/firmware_agent/slices/S19_State_Machine/state_machine.py:9:13
+   |
+ 7 |       """S19 state machine scaffold for phase transitions."""
+ 8 |
+ 9 |       ORDER = [
+   |  _____________^
+10 | |         Phase.REQUIREMENTS_REVIEW,
+11 | |         Phase.ARCHITECTURE,
+12 | |         Phase.IMPLEMENTATION,
+13 | |         Phase.VERIFICATION,
+14 | |         Phase.DOCUMENTATION,
+15 | |         Phase.DONE,
+16 | |     ]
+   | |_____^
+17 |
+18 |       def next_phase(self, current: Phase) -> Phase:
+   |
+help: Consider initializing in `__init__` or annotating with `typing.ClassVar`
+
+PLW1510 `subprocess.run` without explicit `check` argument
+  --> tests/test_slices_graph.py:54:13
+   |
+52 |         path = fh.name
+53 |     try:
+54 |         r = subprocess.run([NODE, path], capture_output=True, text=True, encoding="utf-8")
+   |             ^^^^^^^^^^^^^^
+55 |     finally:
+56 |         Path(path).unlink(missing_ok=True)
+   |
+help: Add explicit `check=False`
+   |
+53 |     try:
+   -         r = subprocess.run([NODE, path], capture_output=True, text=True, encoding="utf-8")
+54 +         r = subprocess.run([NODE, path], check=False, capture_output=True, text=True, encoding="utf-8")
+55 |     finally:
+   |
+note: This suggestion may be incorrect or produce invalid syntax. It requires manual review and cannot be applied automatically
+
+PLW1510 `subprocess.run` without explicit `check` argument
+   --> tests/test_slices_overview.py:136:9
+    |
+135 | def test_markdown_block_matches_standalone_file():
+136 |     r = subprocess.run([sys.executable, str(TOOLS / "sync_diagram_md.py"),
+    |         ^^^^^^^^^^^^^^
+137 |                         MMD.name, MD.name, "--check"],
+138 |                        capture_output=True, text=True, cwd=str(DESIGN))
+    |
+help: Add explicit `check=False`
+    |
+137 |                         MMD.name, MD.name, "--check"],
+    -                        capture_output=True, text=True, cwd=str(DESIGN))
+138 +                        check=False, capture_output=True, text=True, cwd=str(DESIGN))
+139 |     assert r.returncode == 0, f"{r.stdout}{r.stderr}"
+    |
+note: This suggestion may be incorrect or produce invalid syntax. It requires manual review and cannot be applied automatically
+
+PLW1510 `subprocess.run` without explicit `check` argument
+   --> tests/test_slices_overview.py:145:9
+    |
+143 |     if not GRAPH_HTML.exists():
+144 |         raise AssertionError("交互图未生成，跑 tools/gen_interactive_graph.py")
+145 |     r = subprocess.run([sys.executable, str(GENERATOR), "--check"],
+    |         ^^^^^^^^^^^^^^
+146 |                        capture_output=True, text=True, cwd=str(DESIGN))
+147 |     assert r.returncode == 0, f"交互图已过期：\n{r.stdout}{r.stderr}"
+    |
+help: Add explicit `check=False`
+    |
+145 |     r = subprocess.run([sys.executable, str(GENERATOR), "--check"],
+    -                        capture_output=True, text=True, cwd=str(DESIGN))
+146 +                        check=False, capture_output=True, text=True, cwd=str(DESIGN))
+147 |     assert r.returncode == 0, f"交互图已过期：\n{r.stdout}{r.stderr}"
+    |
+note: This suggestion may be incorrect or produce invalid syntax. It requires manual review and cannot be applied automatically
+
+F841 Local variable `selected_source` is assigned to but never used
+   --> src/firmware_agent/slices/S09_PRD_Ingestion/prd_ingestion.py:322:13
+    |
+320 |                 rid += 1
+321 |         if reqs:
+322 |             selected_source = source
+    |             ^^^^^^^^^^^^^^^
+323 |             break
+    |
+help: Remove assignment to unused variable `selected_source`
+    |
+321 |         if reqs:
+    -             selected_source = source
+322 |             break
+    |
+note: This is an unsafe fix and may change runtime behavior
+
+BLE001 Do not catch blind exception: `Exception`
+  --> src/firmware_agent/slices/S10_REGS_Ingestion/regs_ingestion.py:18:20
+   |
+16 |             try:
+17 |                 data = json.loads(p.read_text(encoding="utf-8") or "{}")
+18 |             except Exception:
+   |                    ^^^^^^^^^
+19 |                 data = {}
+20 |             items.append(
+   |
+
+C414 Unnecessary `list()` call within `sorted()`
+  --> src/firmware_agent/slices/S10_REGS_Ingestion/regs_ingestion.py:25:29
+   |
+23 |                     "source_id": f"REGSRC-{idx:03d}",
+24 |                     "file": str(p).replace("\\", "/"),
+25 |                     "keys": sorted(list(data.keys())) if isinstance(data, dict) else [],
+   |                             ^^^^^^^^^^^^^^^^^^^^^^^^^
+26 |                 }
+27 |             )
+   |
+help: Remove the inner `list()` call
+   |
+24 |                     "file": str(p).replace("\\", "/"),
+   -                     "keys": sorted(list(data.keys())) if isinstance(data, dict) else [],
+25 +                     "keys": sorted(data.keys()) if isinstance(data, dict) else [],
+26 |                 }
+   |
+note: This is an unsafe fix and may change runtime behavior
+
+RUF012 Mutable default value for class attribute
+  --> src/firmware_agent/slices/S15_Promotion_Rule_Engine/promotion_rule_engine.py:21:25
+   |
+19 |       """Deterministic promotion engine: LLM can propose, engine decides."""
+20 |
+21 |       HIGH_RISK_SIGNALS = {
+   |  _________________________^
+22 | |         "compile_error",
+23 | |         "link_error",
+24 | |         "runtime_crash",
+25 | |         "behavior_error",
+26 | |         "static_analysis_error",
+27 | |         "hil_fail",
+28 | |     }
+   | |_____^
+29 |
+30 |       def __init__(self, docs_root: Path):
+   |
+help: Consider initializing in `__init__` or annotating with `typing.ClassVar`
+
+RUF012 Mutable default value for class attribute
+  --> src/firmware_agent/slices/S19_State_Machine/state_machine.py:9:13
+   |
+ 7 |       """S19 state machine scaffold for phase transitions."""
+ 8 |
+ 9 |       ORDER = [
+   |  _____________^
+10 | |         Phase.REQUIREMENTS_REVIEW,
+11 | |         Phase.ARCHITECTURE,
+12 | |         Phase.IMPLEMENTATION,
+13 | |         Phase.VERIFICATION,
+14 | |         Phase.DOCUMENTATION,
+15 | |         Phase.DONE,
+16 | |     ]
+   | |_____^
+17 |
+18 |       def next_phase(self, current: Phase) -> Phase:
+   |
+help: Consider initializing in `__init__` or annotating with `typing.ClassVar`
+
+PLW1510 `subprocess.run` without explicit `check` argument
+  --> tests/test_slices_graph.py:54:13
+   |
+52 |         path = fh.name
+53 |     try:
+54 |         r = subprocess.run([NODE, path], capture_output=True, text=True, encoding="utf-8")
+   |             ^^^^^^^^^^^^^^
+55 |     finally:
+56 |         Path(path).unlink(missing_ok=True)
+   |
+help: Add explicit `check=False`
+   |
+53 |     try:
+   -         r = subprocess.run([NODE, path], capture_output=True, text=True, encoding="utf-8")
+54 +         r = subprocess.run([NODE, path], check=False, capture_output=True, text=True, encoding="utf-8")
+55 |     finally:
+   |
+note: This suggestion may be incorrect or produce invalid syntax. It requires manual review and cannot be applied automatically
+
+PLW1510 `subprocess.run` without explicit `check` argument
+   --> tests/test_slices_overview.py:136:9
+    |
+135 | def test_markdown_block_matches_standalone_file():
+136 |     r = subprocess.run([sys.executable, str(TOOLS / "sync_diagram_md.py"),
+    |         ^^^^^^^^^^^^^^
+137 |                         MMD.name, MD.name, "--check"],
+138 |                        capture_output=True, text=True, cwd=str(DESIGN))
+    |
+help: Add explicit `check=False`
+    |
+137 |                         MMD.name, MD.name, "--check"],
+    -                        capture_output=True, text=True, cwd=str(DESIGN))
+138 +                        check=False, capture_output=True, text=True, cwd=str(DESIGN))
+139 |     assert r.returncode == 0, f"{r.stdout}{r.stderr}"
+    |
+note: This suggestion may be incorrect or produce invalid syntax. It requires manual review and cannot be applied automatically
+
+PLW1510 `subprocess.run` without explicit `check` argument
+   --> tests/test_slices_overview.py:145:9
+    |
+143 |     if not GRAPH_HTML.exists():
+144 |         raise AssertionError("交互图未生成，跑 tools/gen_interactive_graph.py")
+145 |     r = subprocess.run([sys.executable, str(GENERATOR), "--check"],
+    |         ^^^^^^^^^^^^^^
+146 |                        capture_output=True, text=True, cwd=str(DESIGN))
+147 |     assert r.returncode == 0, f"交互图已过期：\n{r.stdout}{r.stderr}"
+    |
+help: Add explicit `check=False`
+    |
+145 |     r = subprocess.run([sys.executable, str(GENERATOR), "--check"],
+    -                        capture_output=True, text=True, cwd=str(DESIGN))
+146 +                        check=False, capture_output=True, text=True, cwd=str(DESIGN))
+147 |     assert r.returncode == 0, f"交互图已过期：\n{r.stdout}{r.stderr}"
+    |
+note: This suggestion may be incorrect or produce invalid syntax. It requires manual review and cannot be applied automatically
+
+Found 8 errors.
+2 unsafe fixes available with `--fix --unsafe-fixes`.
+
+
+Command exited with code 1
