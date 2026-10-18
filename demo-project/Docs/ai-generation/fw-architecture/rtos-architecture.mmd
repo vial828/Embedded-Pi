@@ -1,0 +1,155 @@
+flowchart TB
+
+  %% ── 图例（不参与运行关系）──
+  subgraph Legend[图例]
+    direction LR
+    LG1[实线 →] -->|调用 / 数据| LG2[上游被下游调用或产出被消费]
+    LG3[虚线] -.->|IPC / 事件| LG4[任务间只经队列·事件组·信号量相遇]
+    LG5[粗线] ==>|硬件路径| LG6[不经过软件调度器]
+  end
+  style Legend fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.2px,stroke-dasharray:4 3
+
+  subgraph HW[硬件与对端（确定性来源）]
+    H_PWM[加热 PWM<br/>定时器驱动]
+    H_ADC[ADC 序列 + DMA<br/>NTC / VOL / CUR]
+    H_UART[UART RX<br/>BLE · USB]
+    H_GPIO[GPIO 中断<br/>KEY · CAP_WKUP · USB_INT]
+    H_CP[SS805EX<br/>OCP · OTP · MCU 复位]
+    H_CIC[CIC BQ25622<br/>充电状态 · 360min 定时]
+  end
+
+  subgraph ISR[中断层（只搬数据与置标志）]
+    I_ADC[ADC 完成 ISR]
+    I_UART[UART RX ISR]
+    I_TICK[SysTick 1ms]
+    I_IO[GPIO ISR]
+  end
+
+  subgraph KERNEL[内核服务]
+    K_SCHED[调度器<br/>优先级抢占]
+    K_TIMER[软件定时器]
+    K_IPC[队列 · 事件组 · 信号量]
+    K_MEM[静态内存池<br/>禁止 malloc]
+    K_WDG[活性令牌喂狗]
+  end
+
+  subgraph TASKS[任务层]
+    T_SENS["T_SENS 采样/加热闭环<br/>prio1 · 1ms · 512B"]
+    T_SAFE["T_SAFETY 安全监督<br/>prio2 · 10ms · 512B"]
+    T_SESS["T_SESSION 会话状态机<br/>prio3 · 事件 · 1KB"]
+    T_UI["T_UI 界面/动画<br/>prio4 · 20ms · 1.5KB"]
+    T_BLE["T_BLE 协议与 GATT<br/>prio5 · 事件 · 2KB"]
+    T_STOR["T_STORAGE 日志/分区<br/>prio6 · 分片 · 1KB"]
+    T_UPD["T_UPDATE FOTA<br/>prio6 · 分片 · 2KB"]
+    T_CLI["T_CLI USB 控制台<br/>prio7 · 事件 · 1KB"]
+    T_PWR["T_POWER 电源/休眠<br/>prio7 · 事件 · 512B"]
+  end
+
+  subgraph SVC[服务与驱动]
+    S_HEAT[heating_service<br/>档位·曲线·限幅]
+    S_SAFE[interlock<br/>保护判定·失效策略]
+    S_UI[ui]
+    S_BLE[ble_profile]
+    S_LOG[logging]
+    S_UPD[update]
+    S_PWR[power_service]
+    S_CELL[power_cell<br/>充电·电量计]
+  end
+
+  subgraph HAL[HAL / 驱动]
+    D_ADC[adc_sense]
+    D_HEAT[heater]
+    D_LCD[display]
+    D_FLASH[storage]
+    D_LBLE[link_ble]
+    D_LUSB[link_usb_cli]
+    D_HAP[haptics]
+    D_IO[gpio_io]
+    D_CORE[mcu_core<br/>时钟·复位·双核]
+  end
+
+  %% ── 硬件 → 中断 ──
+  H_ADC ==> I_ADC
+  H_UART ==> I_UART
+  H_GPIO ==> I_IO
+  H_PWM ==> H_ADC
+
+  %% ── 中断 → 内核 ──
+  I_ADC -.->|样本就绪| K_IPC
+  I_UART -.->|帧到达| K_IPC
+  I_TICK ==> K_SCHED
+  I_IO -.->|事件| K_IPC
+
+  %% ── 内核 → 任务 ──
+  K_SCHED --> T_SENS
+  K_SCHED --> T_SAFE
+  K_SCHED --> T_UI
+  K_TIMER -.->|周期 20ms| T_UI
+  K_TIMER -.->|周期 10ms| T_SAFE
+  K_IPC -.-> T_SESS
+  K_IPC -.-> T_BLE
+  K_IPC -.-> T_STOR
+  K_IPC -.-> T_UPD
+  K_IPC -.-> T_CLI
+  K_IPC -.-> T_PWR
+
+  %% ── 任务 → 服务 ──
+  T_SENS --> S_HEAT
+  T_SAFE --> S_SAFE
+  T_SESS --> S_HEAT
+  T_SESS --> S_PWR
+  T_UI --> S_UI
+  T_BLE --> S_BLE
+  T_STOR --> S_LOG
+  T_UPD --> S_UPD
+  T_PWR --> S_PWR
+  T_PWR --> S_CELL
+
+  %% ── 服务 → HAL ──
+  S_HEAT --> D_HEAT
+  S_HEAT --> D_ADC
+  S_SAFE --> D_ADC
+  S_UI --> D_LCD
+  S_UI --> D_HAP
+  S_BLE --> D_LBLE
+  S_LOG --> D_FLASH
+  S_UPD --> D_FLASH
+  S_PWR --> D_CORE
+  S_CELL --> D_ADC
+
+  %% ── HAL → 硬件 ──
+  D_HEAT --> H_PWM
+  D_ADC --> H_ADC
+  D_LBLE --> H_UART
+  D_LUSB --> H_UART
+  D_IO --> H_GPIO
+
+  %% ── 不经软件的安全路径 ──
+  H_CP ==>|过流/过热直接断开| H_PWM
+  H_CP ==>|CY_NRES| D_CORE
+  H_CIC -.->|充电事件| I_IO
+
+  %% ── 活性 ──
+  T_SENS --> K_WDG
+  T_SAFE --> K_WDG
+  T_UI --> K_WDG
+  T_BLE --> K_WDG
+  K_WDG --> D_CORE
+
+  %% ── 配色：按职责分层 ──
+  classDef hw fill:#0F172A,color:#E2E8F0,stroke:#475569
+  classDef isr fill:#FEE2E2,color:#7F1D1D,stroke:#DC2626
+  classDef kernel fill:#E0E7FF,color:#1E1B4B,stroke:#4F46E5
+  classDef task fill:#DBEAFE,color:#1E3A8A,stroke:#2563EB
+  classDef svc fill:#DCFCE7,color:#14532D,stroke:#16A34A
+  classDef hal fill:#FEF3C7,color:#78350F,stroke:#D97706
+  classDef safety fill:#FBCFE8,color:#831843,stroke:#DB2777
+
+  class H_PWM,H_ADC,H_UART,H_GPIO,H_CIC hw
+  class H_CP safety
+  class I_ADC,I_UART,I_TICK,I_IO isr
+  class K_SCHED,K_TIMER,K_IPC,K_MEM,K_WDG kernel
+  class T_SENS,T_SAFE,T_SESS,T_UI,T_BLE,T_STOR,T_UPD,T_CLI,T_PWR task
+  class S_HEAT,S_UI,S_BLE,S_LOG,S_UPD,S_PWR,S_CELL svc
+  class S_SAFE safety
+  class D_ADC,D_HEAT,D_LCD,D_FLASH,D_LBLE,D_LUSB,D_HAP,D_IO,D_CORE hal

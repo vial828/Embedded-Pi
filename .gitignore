@@ -37,6 +37,8 @@ demo-project/Docs/*
 demo-project/Docs/ai-generation/**
 !demo-project/Docs/ai-generation/fw-architecture/
 demo-project/Docs/ai-generation/fw-architecture/**
+!demo-project/Docs/ai-generation/fw-architecture/*.md
+!demo-project/Docs/ai-generation/fw-architecture/*.mmd
 !demo-project/Docs/ai-generation/fw-architecture/system-design/
 !demo-project/Docs/ai-generation/fw-architecture/system-design/*.md
 !demo-project/Docs/ai-generation/knowledge/
