@@ -46,5 +46,9 @@ demo-project/Docs/ai-generation/knowledge/**
 !demo-project/Docs/ai-generation/knowledge/requirements_index.json
 *.log
 
+# --- 调试产物（不是开发产物，随时可删）---
+# 提示词日志 .epi/debug/prompt-journal/ 含 PRD 原文片段，且删掉不该影响任何功能。
+.epi/
+
 # --- 编辑器/系统杂项 ---
 .DS_Store

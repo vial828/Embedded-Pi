@@ -19,7 +19,7 @@ class FirmwareAgent:
         self.config = load_config(self.workspace_dir / "config.yaml")
         self.state = WorkingState(mcu=self.config.project.name)
         self.planner = TaskPlanner()
-        self.assembler = ContextAssembler(self.config, str(self.workspace_dir))
+        self.assembler = ContextAssembler(self.config, str(self.workspace_dir), journal_root=self.project_dir)
         self.llm = LLMClient(self.config, self.workspace_dir)
         self.verifier = Verifier(self.config, self.workspace_dir)
         self.memory = MemoryStore(self.workspace_dir)
