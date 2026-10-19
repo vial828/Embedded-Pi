@@ -60,7 +60,9 @@ def test_configured_project_is_not_a_template(project: Path) -> None:
 def test_missing_file_names_every_candidate(tmp_path: Path) -> None:
     with pytest.raises(ConfigError) as err:
         load_project_config(tmp_path)
-    message = str(err.value)
+    # Separator-agnostic on purpose: the assertion is about *which candidates were
+    # searched*, and on Windows Path renders them with backslashes.
+    message = str(err.value).replace("\\", "/")
     assert "Docs/config.yaml" in message and "config.yaml" in message
 
 

@@ -113,10 +113,14 @@ class ToolchainConfig(_StrictModel):
         """
         if self.objcopy:
             return self.objcopy
-        compiler = Path(self.compiler)
-        name = compiler.name
+        # String surgery, not Path: the configured value is an opaque path written by a
+        # human for the machine that will run it. Path() rewrites separators through the
+        # *current* OS, which on Windows turned a configured /opt/ti/bin/... into
+        # \opt\ti\bin\... - a wrong tool path, silently, on the other machine.
+        separator = max(self.compiler.rfind("/"), self.compiler.rfind("\\"))
+        directory, name = self.compiler[: separator + 1], self.compiler[separator + 1:]
         if name.endswith("gcc"):
-            return str(compiler.with_name(f"{name[:-3]}objcopy"))
+            return f"{directory}{name[:-3]}objcopy"
         raise ConfigError(
             f"toolchain.objcopy is not set and cannot be derived from {self.compiler!r}. "
             "Set toolchain.objcopy explicitly."
