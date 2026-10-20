@@ -13,8 +13,8 @@ flowchart LR
   %% 判据只有一问：这条边搬的是内容，还是决策？
   subgraph Legend[图例 Legend]
     direction LR
-    LGS[数据流] --> LGE[搬内容]
-    LRS[工作流] -.-> LRE[搬决策]
+    LGS[数据流] --> LGE[交付产物为主]
+    LRS[控制流] -.-> LRE[驱动下游为主]
     LPU[待定] -.->| ？示例 | LPE[尚未裁定]
   end
   style Legend fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.2px,stroke-dasharray:4 3
@@ -79,8 +79,8 @@ flowchart LR
     S31[S31 CI矩阵]
   end
 
-  %% 开发依赖（数据流：橙实线，箭头 -->）
-  S01 -->| CLI契约| S02
+  %% 数据流（橙实线，箭头 -->）：这条边存在的理由是交付产物
+  S01 -.->| 调用| S02
   S02 -->| config.yaml| S03
   S02 -->| 模板骨架| S04
   S04 -->| system-design.md| S05
@@ -101,14 +101,14 @@ flowchart LR
   S11 -->| artifact_graph| S15
   S14 -->| candidate| S15
   S13 -->| long base| S16
-  S15 -.->| ？promotion| S16
+  S15 -.->| 晋升后的规则| S16
   S12 -->| working| S17
   S16 -->| pack| S17
 
 
   S03 -->| 配置| S18
   S18 -->| 任务序列| S19
-  S19 -.->| ？phase/task| S20
+  S19 -.->| 调用 LLM| S20
   S19 -.->| 调度| S21
   S21 -->| 产物| S22
   S22 -->| 编译结果| S23
@@ -118,7 +118,7 @@ flowchart LR
   S24 -->| 仿真结果| S25
   S25 -->| 分类标签| S26
 
-  S19 -.->| ？追踪| S27
+  S19 -->| 追踪规格| S27
   S13 -->| 决策| S28
   S22 -->| 编译结果| S29
   S23 -->| 静态结果| S29
@@ -126,28 +126,23 @@ flowchart LR
   S27 -->| 证据| S30
   S28 -->| 证据| S30
   S29 -->| 证据| S30
-  S30 -.->| ？判定| S31
+  S30 -.->| 判定门控| S31
 
-  %% 运行时依赖（工作流：蓝实线，箭头仍写 -.->）
-  S17 -.->| ？上一轮上下文回写| S12
-  S15 -.->| 晋升写入事件| S13
+  %% 运行时控制（控制流：蓝实线，箭头写 -.->）
+  S17 -.->| 上一轮上下文回写| S12
+  S15 -.->| ？晋升写入| S13
   S20 -->| 候选提名| S14
   S19 -.->| 当前task查询| S16
   S19 -->| 当前phase/task| S17
   S17 -->| 上下文输入| S18
   S26 -.->| 重试反馈| S19
-  S17 -.->| ？context pack| S20
+  S17 -->| context pack| S20
   S20 -.->| 工具调用计划| S21
-  S22 -.->| 编译信号| S23
-  S22 -.->| 编译信号| S24
-  S22 -.->| 编译信号| S25
-  S23 -.->| 静态信号| S25
-  S24 -.->| 仿真信号| S25
   S21 -->| 执行记录| S27
   S22 -->| 编译记录| S27
   S23 -->| 静态记录| S27
   S24 -->| 仿真记录| S27
-  S19 -.->| 状态转移事件| S28
+  S19 -->| 状态转移事件| S28
 
   IN_TOOL -->| env| S03
   IN_PRD -->| 约束| S04
@@ -164,85 +159,80 @@ flowchart LR
   IN_TOOL -->| CI环境| S31
 
   %% 样式：颜色由 tools/apply_edge_style.py 依 graph-rules.json 生成，勿手改
-  %% 实线=数据流；虚线=工作流；虚线且标签含 ？ =待定。改箭头后重跑本脚本
+  %% 类别只由箭头写法决定（--> 数据流，-.-> 控制流，-.->且标签含 ？ 待定），配色是输出不是输入
   linkStyle default stroke:#F97316,stroke-width:2.2px
-  linkStyle 0 stroke:#F97316,stroke-width:2.2px
-  linkStyle 1 stroke:#2563EB,stroke-width:2.2px
+  linkStyle 0 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 1 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 2 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
-  linkStyle 3 stroke:#F97316,stroke-width:2.2px
-  linkStyle 4 stroke:#F97316,stroke-width:2.2px
-  linkStyle 5 stroke:#F97316,stroke-width:2.2px
-  linkStyle 6 stroke:#F97316,stroke-width:2.2px
-  linkStyle 7 stroke:#F97316,stroke-width:2.2px
-  linkStyle 8 stroke:#F97316,stroke-width:2.2px
-  linkStyle 9 stroke:#F97316,stroke-width:2.2px
-  linkStyle 10 stroke:#F97316,stroke-width:2.2px
-  linkStyle 11 stroke:#F97316,stroke-width:2.2px
-  linkStyle 12 stroke:#F97316,stroke-width:2.2px
-  linkStyle 13 stroke:#F97316,stroke-width:2.2px
-  linkStyle 14 stroke:#F97316,stroke-width:2.2px
-  linkStyle 15 stroke:#F97316,stroke-width:2.2px
-  linkStyle 16 stroke:#F97316,stroke-width:2.2px
-  linkStyle 17 stroke:#F97316,stroke-width:2.2px
-  linkStyle 18 stroke:#F97316,stroke-width:2.2px
-  linkStyle 19 stroke:#F97316,stroke-width:2.2px
-  linkStyle 20 stroke:#F97316,stroke-width:2.2px
-  linkStyle 21 stroke:#F97316,stroke-width:2.2px
-  linkStyle 22 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
-  linkStyle 23 stroke:#F97316,stroke-width:2.2px
-  linkStyle 24 stroke:#F97316,stroke-width:2.2px
-  linkStyle 25 stroke:#F97316,stroke-width:2.2px
-  linkStyle 26 stroke:#F97316,stroke-width:2.2px
-  linkStyle 27 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
-  linkStyle 28 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 29 stroke:#F97316,stroke-width:2.2px
-  linkStyle 30 stroke:#F97316,stroke-width:2.2px
-  linkStyle 31 stroke:#F97316,stroke-width:2.2px
-  linkStyle 32 stroke:#F97316,stroke-width:2.2px
-  linkStyle 33 stroke:#F97316,stroke-width:2.2px
-  linkStyle 34 stroke:#F97316,stroke-width:2.2px
-  linkStyle 35 stroke:#F97316,stroke-width:2.2px
-  linkStyle 36 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
-  linkStyle 37 stroke:#F97316,stroke-width:2.2px
-  linkStyle 38 stroke:#F97316,stroke-width:2.2px
-  linkStyle 39 stroke:#F97316,stroke-width:2.2px
-  linkStyle 40 stroke:#F97316,stroke-width:2.2px
-  linkStyle 41 stroke:#F97316,stroke-width:2.2px
-  linkStyle 42 stroke:#F97316,stroke-width:2.2px
-  linkStyle 43 stroke:#F97316,stroke-width:2.2px
-  linkStyle 44 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
-  linkStyle 45 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
-  linkStyle 46 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 47 stroke:#F97316,stroke-width:2.2px
-  linkStyle 48 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 49 stroke:#F97316,stroke-width:2.2px
-  linkStyle 50 stroke:#F97316,stroke-width:2.2px
-  linkStyle 51 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 52 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
-  linkStyle 53 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 54 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 55 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 56 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 57 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 58 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 59 stroke:#F97316,stroke-width:2.2px
-  linkStyle 60 stroke:#F97316,stroke-width:2.2px
-  linkStyle 61 stroke:#F97316,stroke-width:2.2px
-  linkStyle 62 stroke:#F97316,stroke-width:2.2px
-  linkStyle 63 stroke:#2563EB,stroke-width:2.2px
-  linkStyle 64 stroke:#F97316,stroke-width:2.2px
-  linkStyle 65 stroke:#F97316,stroke-width:2.2px
-  linkStyle 66 stroke:#F97316,stroke-width:2.2px
-  linkStyle 67 stroke:#F97316,stroke-width:2.2px
-  linkStyle 68 stroke:#F97316,stroke-width:2.2px
-  linkStyle 69 stroke:#F97316,stroke-width:2.2px
-  linkStyle 70 stroke:#F97316,stroke-width:2.2px
-  linkStyle 71 stroke:#F97316,stroke-width:2.2px
-  linkStyle 72 stroke:#F97316,stroke-width:2.2px
-  linkStyle 73 stroke:#F97316,stroke-width:2.2px
-  linkStyle 74 stroke:#F97316,stroke-width:2.2px
-  linkStyle 75 stroke:#F97316,stroke-width:2.2px
-  linkStyle 76 stroke:#F97316,stroke-width:2.2px
+  linkStyle 3 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 4 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 5 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 6 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 7 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 8 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 9 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 10 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 11 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 12 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 13 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 14 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 15 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 16 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 17 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 18 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 19 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 20 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 21 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 22 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 23 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 24 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 25 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 26 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 27 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 28 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 29 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 30 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 31 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 32 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 33 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 34 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 35 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 36 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 37 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 38 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 39 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 40 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 41 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 42 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 43 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 44 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 45 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 46 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
+  linkStyle 47 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 48 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 49 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 50 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 51 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 52 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 53 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 54 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 55 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 56 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 57 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 58 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 59 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 60 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 61 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 62 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 63 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 64 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 65 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 66 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 67 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 68 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 69 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 70 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 71 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
 ```
 
 ### 1.1 边的图例

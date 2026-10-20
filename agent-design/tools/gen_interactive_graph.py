@@ -386,14 +386,34 @@ def place_labels_on_own_edge(labels, segs, rects):
     """
     hh = LABEL_H / 2
     placed = []
-    for lab in labels:
+
+    def slots(lab):
+        """Candidate boxes, centre-out along the edge. Wider than it looks necessary:
+        with 69 labels the middle of a long edge is usually already taken."""
+        out = []
+        for t in (0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7, 0.25, 0.75, 0.2, 0.8):
+            x, y = _poly_at(lab["pts"], t)
+            for dx in (0, 16, -16, 32, -32, 48, -48, 64, -64, 80, -80):
+                for dy in (0, -7, 7, -14, 14, -22, 22, -30, 30):
+                    out.append((x + dx, y + dy, t))
+        return out
+
+    def free_slots(lab):
+        """How many candidates miss every other edge and every node - the label's
+        degree of freedom. Placement runs tightest-first: greedy in declaration order
+        let early labels take the only clean slots in a dense region."""
+        hw, n = lab["w"] / 2, 0
+        for cx, cy, _t in slots(lab):
+            if any(_box_covers(cx, cy, hw, hh, seg, pad=1.0) for owner, seg in segs if owner != lab["idx"]):
+                continue
+            if any(abs(cx - rx) < hw + rw / 2 and abs(cy - ry) < hh + rh / 2 for rx, ry, rw, rh in rects):
+                continue
+            n += 1
+        return n
+
+    for lab in sorted(labels, key=lambda l: (free_slots(l), l["idx"])):
         own = lab["pts"]
-        cands = []
-        for t in [0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7][:9]:
-            x, y = _poly_at(own, t)
-            for dx in (0, 20, -20, 40, -40, 60, -60):
-                for dy in (0, -7, 7, -14, 14, -22, 22):
-                    cands.append((x + dx, y + dy, t))
+        cands = slots(lab)
         scored = []
         for cx, cy, t in cands:
             if scored and scored[0][0] <= abs(t - 0.5) * 6:

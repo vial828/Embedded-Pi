@@ -83,7 +83,7 @@ def main() -> int:
 
     style = [
         f"  {STYLE_MARK}：颜色由 tools/apply_edge_style.py 依 graph-rules.json 生成，勿手改",
-        "  %% 实线=数据流；虚线=工作流；虚线且标签含 ？ =待定。改箭头后重跑本脚本",
+        "  %% 类别只由箭头写法决定（--> 数据流，-.-> 控制流，-.->且标签含 ？ 待定），配色是输出不是输入",
         f"  linkStyle default stroke:{by_class[default_class]['stroke'].upper()},"
         f"stroke-width:{by_class[default_class].get('width', '2.2px')}",
     ]
@@ -91,8 +91,10 @@ def main() -> int:
         spec = by_class[kind_of[i]]
         width = "3.2px" if spec.get("warn") else "2.2px"
         line = f"  linkStyle {i} stroke:{spec['stroke'].upper()},stroke-width:{width}"
-        if spec.get("warn"):
-            line += ",stroke-dasharray:6 3"
+        # A `-.->` arrow carries its own dash pattern. Setting only the colour leaves
+        # it dotted, which is how "solid blue" came out looking like a dotted line:
+        # solid classes must clear the pattern explicitly.
+        line += ",stroke-dasharray:6 3" if spec.get("dash") else ",stroke-dasharray:0"
         style.append(line)
 
     a.mmd.write_text("\n".join(body + [""] + style) + "\n", encoding="utf-8")
