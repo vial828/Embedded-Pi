@@ -5,7 +5,7 @@
 ## 1. 总体开发大图（EPI 本体，不是 FW 业务架构）
 
 ```mermaid
-%%{init: {"flowchart": {"nodeSpacing": 26, "rankSpacing": 46, "padding": 2, "curve": "linear", "htmlLabels": false}, "themeVariables": {"fontSize": "13px"}}}%%
+%%{init: {"flowchart": {"nodeSpacing": 26, "rankSpacing": 46, "padding": 2, "curve": "linear", "htmlLabels": false, "useMaxWidth": false, "wrap": true}, "themeVariables": {"fontSize": "13px"}}}%%
 flowchart LR
 
   %% ── 图例（不参与数据流，配色见文件末尾样式块）──
