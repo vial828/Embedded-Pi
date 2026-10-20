@@ -1,4 +1,4 @@
-%%{init: {"flowchart": {"nodeSpacing": 26, "rankSpacing": 80, "padding": 4, "curve": "linear", "htmlLabels": false}, "themeVariables": {"fontSize": "13px"}}}%%
+%%{init: {"flowchart": {"nodeSpacing": 26, "rankSpacing": 46, "padding": 2, "curve": "linear", "htmlLabels": false}, "themeVariables": {"fontSize": "13px"}}}%%
 flowchart LR
 
   %% ── 图例（不参与数据流，配色见文件末尾样式块）──
@@ -6,16 +6,16 @@ flowchart LR
   %% 判据只有一问：这条边搬的是内容，还是决策？
   subgraph Legend[图例 Legend]
     direction LR
-    LGS[数据流] --> LGE[搬内容：下游消费它，不改变下一步做谁]
-    LRS[工作流] -.-> LRE[搬决策：下游因它被触发或改变走向]
-    LPU[待定] -.->| ？示例 | LPE[既是内容又是决策，尚未裁定，勿据此推导开发顺序]
+    LGS[数据流] --> LGE[搬内容]
+    LRS[工作流] -.-> LRE[搬决策]
+    LPU[待定] -.->| ？示例 | LPE[尚未裁定]
   end
   style Legend fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.2px,stroke-dasharray:4 3
 
   subgraph Inputs[外部输入]
     IN_PRD[PRD]
     IN_BSP[BSP]
-    IN_HW[HW: SCH/DATASHEET/REGS/PIN_MAP]
+    IN_HW[HW 输入]
     IN_STD[STANDARDS]
     IN_TOOL[TOOLCHAIN/ENV]
   end
@@ -72,7 +72,7 @@ flowchart LR
     S31[S31 CI矩阵]
   end
 
-  %% 开发依赖（实线）
+  %% 开发依赖（数据流：橙实线，箭头 -->）
   S01 -->| CLI契约| S02
   S02 -->| config.yaml| S03
   S02 -->| 模板骨架| S04
@@ -121,7 +121,7 @@ flowchart LR
   S29 -->| 证据| S30
   S30 -.->| ？判定| S31
 
-  %% 运行时依赖（虚线，橙色）
+  %% 运行时依赖（工作流：蓝实线，箭头仍写 -.->）
   S17 -.->| ？上一轮上下文回写| S12
   S15 -.->| 晋升写入事件| S13
   S20 -->| 候选提名| S14
