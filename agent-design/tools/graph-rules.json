@@ -40,11 +40,14 @@
     "reject": true
   },
   "layout": {
-    "level_spacing": 360,
-    "row_spacing": 66,
-    "node_width": 152,
-    "node_height": 42,
-    "sweeps": 4
+    "level_spacing": 168,
+    "row_spacing": 48,
+    "node_height": 30,
+    "node_min_width": 56,
+    "node_max_width": 132,
+    "node_padding": 9,
+    "sweeps": 4,
+    "_comment": "node_width 已删除：统一宽度是按最长标签画的，中位标签只有 8 字，于是每个框都按最宽的画"
   },
   "node_info": {
     "md": "epi-dev-slices-overview.md",

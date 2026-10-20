@@ -526,7 +526,6 @@ def build(config_path):
     layout = dict(rules.get("layout", {}))
     sx = layout.get("level_spacing", 250)
     sy = layout.get("row_spacing", 66)
-    w = layout.get("node_width", 152)
     h = layout.get("node_height", 42)
 
     scc = scc_ids(edges)
@@ -547,6 +546,13 @@ def build(config_path):
     for l in layers:
         layers[l].sort(key=lambda it: (it[0] == "d", str(it)))
     pos = order_layers(layers, chains, layout.get("sweeps", 4))
+
+    # 框宽按各自标签算，不再全图统一。统一宽度等于按最长的那个标签给 31 个框留白：
+    # 中位标签 8 个字，原来 152 的宽度里约一半是空的，整张图因此横向拉宽。
+    pad, min_w, max_w = layout.get("node_padding", 9), layout.get("node_min_width", 56), layout.get("node_max_width", 132)
+    w_of = {n: min(max_w, max(min_w, len(doc.nodes[n].label if n in doc.nodes else n) * CHAR_W + 2 * pad))
+            for n in ids}
+    w = max(w_of.values())      # 绕行通道仍按列内最宽算，保证列间留白一致
 
     # y coordinate: slot index, centred per column
     height = max(len(v) for v in layers.values())
@@ -585,18 +591,19 @@ def build(config_path):
         la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
         ya, yb = out_y[idx], in_y[idx]
         lane = back_lanes[idx] % 6
+        wa, wb = w_of.get(e["src"], w), w_of.get(e["dst"], w)
         if la == lb:                       # 同列：从右侧绕出去再回来
-            x = x_of[la] + w + 22 + lane * 11
-            geo[idx] = [(x_of[la] + w, ya), (x, (ya + yb) / 2), (x_of[lb] + w, yb)]
+            x = x_of[la] + max(wa, wb) + 22 + lane * 11
+            geo[idx] = [(x_of[la] + wa, ya), (x, (ya + yb) / 2), (x_of[lb] + wb, yb)]
         else:                              # 真反向：源左出、目标右入，走列间通道
-            lo, hi = x_of[lb] + w, x_of[la]
+            lo, hi = x_of[lb] + wb, x_of[la]
             geo[idx] = [(x_of[la], ya),
                         (lo + (hi - lo) * (lane + 1) / 7.0, (ya + yb) / 2),
-                        (x_of[lb] + w, yb)]
+                        (x_of[lb] + wb, yb)]
 
     segs = [(owner, _boxed(_seg(a, b))) for owner, pts in geo.items()
             for a, b in zip(pts, pts[1:])]
-    rects = [(x_of[level_of.get(n, 0)] + w / 2, y_of[("n", n)] - h / 2, w, h) for n in ids]
+    rects = [(x_of[level_of.get(n, 0)] + w_of[n] / 2, y_of[("n", n)] - h / 2, w_of[n], h) for n in ids]
     labels = []
     for idx, e in enumerate(edges):
         labels.append({"for": f"{e['src']}->{e['dst']}", "idx": idx, "pts": geo[idx],
@@ -655,7 +662,9 @@ def build(config_path):
                   "labels": len(labels),
                   "label_overlaps": len(overlaps(labels)),
                   "labels_off_own_edge": sum(1 for l in labels if not l["on_own"]),
-                  "labels_crossing_others": sum(1 for l in labels if l["cross_others"])},
+                  "labels_crossing_others": sum(1 for l in labels if l["cross_others"]),
+                  # 调紧凑度要有数可看，不然只能凭眼睛判断"这次是不是变小了"
+                  "avg_box_w": round(sum(w_of.values()) / len(w_of), 1) if w_of else 0},
     }
 
 
@@ -703,7 +712,9 @@ def main() -> int:
             continue
         cfg_path.write_text(html, encoding="utf-8")
         print(f"{cfg_path.name}: {len(data['nodes'])} 节点 / {len(data['edges'])} 边 "
-              f"交叉 {data['stats']['crossings']} / 标签 {data['stats']['labels']}")
+              f"交叉 {data['stats']['crossings']} / 标签 {data['stats']['labels']} / "
+              f"画布 {data['canvas']['w']:.0f}x{data['canvas']['h']:.0f} "
+              f"/ 平均框宽 {data['stats']['avg_box_w']}")
         if args.open_it:
             os.startfile(str(cfg_path)) if hasattr(os, "startfile") else os.system(f'xdg-open "{cfg_path}"')
     return stale
