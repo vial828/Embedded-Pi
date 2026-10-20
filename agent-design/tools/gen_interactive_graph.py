@@ -565,6 +565,11 @@ def build(config_path):
     sy = layout.get("row_spacing", 66)
     h = layout.get("node_height", 42)
 
+    # 副本先归并回原件：图上可以多画几份，拓扑上仍是一个节点
+    alias = doc.aliases()
+    for e in edges:
+        e["src"], e["dst"] = alias.get(e["src"], e["src"]), alias.get(e["dst"], e["dst"])
+
     scc = scc_ids(edges)
     # Layering is a drawing concern: it uses every relation, SCC-condensed. It used
     # to reuse the data-flow class, which silently coupled layout to semantics - and

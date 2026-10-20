@@ -71,6 +71,48 @@ class MermaidDoc:
     def no_layout_ids(self):
         return {t for _n, args, _l in self.directives if _n == "no-layout" for t in args.split()}
 
+    def aliases(self):
+        """`%% @alias <copyId> = <targetId>` - a rendering copy of one node.
+
+        A node gets one position. A source feeding consumers at both ends of the picture
+        can therefore sit next to one of them, or next to neither - never next to all.
+        Copies let the picture say "the same input is used over there too" without lying
+        about the topology: every consumer collapses copies through `canonical()` before
+        computing anything, so ordering, cycles and coverage still see one node.
+        """
+        out = {}
+        for name, args, _line in self.directives:
+            if name != "alias":
+                continue
+            left, _, right = args.partition("=")
+            if left.strip() and right.strip():
+                out[left.strip()] = right.strip()
+        return out
+
+    def canonical(self, node_id):
+        target, seen = self.aliases().get(node_id, node_id), {node_id}
+        while target in self.aliases() and target not in seen:
+            seen.add(target)
+            target = self.aliases()[target]
+        return target
+
+    def alias_problems(self):
+        """A copy that drifts from its original is worse than no copy: it reads as a
+        different input. So the label must match, the target must exist, and an unused
+        copy is noise that belongs in the bin."""
+        out = []
+        for copy, target in sorted(self.aliases().items()):
+            if target not in self.nodes:
+                out.append(f"别名 {copy} 指向不存在的节点 {target}")
+            elif copy in self.nodes and target in self.nodes                     and self.nodes[copy].label != self.nodes[target].label:
+                out.append(f"别名 {copy} 的文字是 {self.nodes[copy].label!r}，原件是 {self.nodes[target].label!r}")
+            elif copy not in self.nodes:
+                out.append(f"别名 {copy} 没有节点定义")
+            used = {e.src for e in self.edges} | {e.dst for e in self.edges}
+            if copy not in used:
+                out.append(f"别名 {copy} 一条边都没连，是噪音")
+        return out
+
     def legend_nodes(self):
         """Node ids declared inside a subgraph named by `%% @legend <id>`."""
         ids = self.legend_ids()

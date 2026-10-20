@@ -28,6 +28,7 @@ flowchart LR
   end
 
   subgraph Foundation[基础层]
+    direction TB
     S01[S01 CLI入口]
     S02[S02 布局/模板]
     S03[S03 配置校验]
@@ -41,6 +42,8 @@ flowchart LR
   end
 
   subgraph Knowledge[知识层]
+    %% @alias IN_PRD_K = IN_PRD
+    IN_PRD_K[PRD]
     S08[S08 STANDARDS]
     S09[S09 PRD]
     S10[S10 REGS]
@@ -48,6 +51,7 @@ flowchart LR
   end
 
   subgraph Memory[记忆层]
+    direction TB
     S12[S12 短记忆]
     S13[S13 长记忆]
     S14[S14 候选记忆]
@@ -56,6 +60,8 @@ flowchart LR
   end
 
   subgraph AgentCore[核心层]
+    %% @alias IN_PRD_A = IN_PRD
+    IN_PRD_A[PRD]
     S17[S17 Context]
     S18[S18 Planner]
     S19[S19 State]
@@ -64,6 +70,9 @@ flowchart LR
   end
 
   subgraph Verify[验证层]
+    direction TB
+    %% @alias IN_TOOL_V = IN_TOOL
+    IN_TOOL_V[TOOLCHAIN/ENV]
     S22[S22 编译验证]
     S23[S23 静态验证]
     S24[S24 仿真验证]
@@ -72,6 +81,9 @@ flowchart LR
   end
 
   subgraph Delivery[交付层]
+    direction TB
+    %% @alias IN_TOOL_D = IN_TOOL
+    IN_TOOL_D[TOOLCHAIN/ENV]
     S27[S27 Traceability]
     S28[S28 Decision Log]
     S29[S29 Test Report]
@@ -152,11 +164,11 @@ flowchart LR
   IN_STD -->| source| S08
   IN_PRD -->| source| S09
   IN_HW -->| source| S10
-  IN_PRD -->| req| S11
+  IN_PRD_K -->| req| S11
   IN_HW -->| reg| S11
-  IN_PRD -->| task语义| S18
-  IN_TOOL -->| 仿真环境| S24
-  IN_TOOL -->| CI环境| S31
+  IN_PRD_A -->| task语义| S18
+  IN_TOOL_V -->| 仿真环境| S24
+  IN_TOOL_D -->| CI环境| S31
 
   %% 样式：颜色由 tools/apply_edge_style.py 依 graph-rules.json 生成，勿手改
   %% 类别只由箭头写法决定（--> 数据流，-.-> 控制流，-.->且标签含 ？ 待定），配色是输出不是输入

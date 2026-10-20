@@ -122,6 +122,19 @@ def test_uncertain_edges_are_marked_with_question(edges, rules):
     assert not mislabelled, f"带 ？ 但不是待定类别：{mislabelled}"
 
 
+def test_alias_copies_cannot_drift_from_their_original(doc):
+    """A copy that reads differently is a second input wearing the first one's name."""
+    assert not doc.alias_problems()
+
+
+def test_alias_copies_are_one_node_to_every_computation(doc, rules):
+    """The copy exists for the picture only; topology must not gain a node."""
+    raw = {e.src for e in doc.graph_edges()} | {e.dst for e in doc.graph_edges()}
+    collapsed = {doc.canonical(n) for n in raw}
+    assert len(collapsed) < len(raw), "没有副本可归并，这条测试就没在测东西"
+    assert collapsed == raw - set(doc.aliases())
+
+
 def test_no_duplicate_relations(edges):
     seen = collections.defaultdict(list)
     for e in edges:
