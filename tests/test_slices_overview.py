@@ -87,15 +87,24 @@ def test_colours_are_registered_in_the_rules(doc, rules):
     assert not unknown, f"配色未登记在 graph-rules.json 的 palette 中：{sorted(unknown)}"
 
 
-def test_colour_and_arrow_agree(edges, rules):
-    titles = {p["class"]: p["title"] for p in rules["palette"]}
+def test_colour_and_arrow_agree(doc, rules):
+    """Colour carries the class, so the arrow has to say the same thing.
+
+    Line style used to be the class (solid = 数据流, dashed = 工作流). Both are solid
+    now and only 待定 keeps a dashed arrow, so the check is colour against the arrow
+    form each palette entry declares. A mismatch is the same class of lie the 133-line
+    hand-written style block used to tell: the picture renders something other than
+    what its own syntax states.
+    """
     bad = []
-    for e in edges:
-        if e["kind"] == "data" and e["dash"]:
-            bad.append((e["src"], e["dst"], "数据流必须是实线"))
-        elif e["kind"] != "data" and not e["dash"]:
-            bad.append((e["src"], e["dst"], f"{titles.get(e['kind'])}必须是虚线"))
-    assert not bad, f"配色与线型不符：{bad}"
+    for index, edge in enumerate(doc.edges):
+        style = mermaid_doc.style_for(doc, index)
+        spec = rules["_by_stroke"].get(style.get("stroke", "").lower())
+        if spec is None:
+            continue                      # 未登记的配色由生成器报错，不在这里重复
+        if graph_tool.arrow_form(edge) != spec.get("syntax"):
+            bad.append(f"{edge.src}->{edge.dst} 要求 {spec.get('syntax')}")
+    assert not bad, f"配色与箭头写法不符：{bad}"
 
 
 def test_uncertain_edges_are_marked_with_question(edges, rules):

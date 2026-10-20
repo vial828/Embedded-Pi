@@ -47,27 +47,42 @@ LABEL_H = 12.0
 # --------------------------------------------------------------------------- #
 def load_rules(path):
     rules = json.loads(Path(path).read_text(encoding="utf-8"))
-    rules["_by_style"] = {(p["stroke"].lower(), bool(p["dash"])): p for p in rules["palette"]}
+    # Keyed by colour alone. It used to be (colour, dashed), which worked only while
+    # every class had its own line style: once two classes are solid and differ by
+    # colour, that key either mis-classifies or rejects valid edges. Colour identifies
+    # the class; the arrow is then checked against the class's declared syntax.
+    rules["_by_stroke"] = {p["stroke"].lower(): p for p in rules["palette"]}
     return rules
+
+
+def arrow_form(edge) -> str:
+    if not edge.dashed:
+        return "solid"
+    return "dashed?" if ("？" in (edge.label or "") or "?" in (edge.label or "")) else "dashed"
 
 
 def classify(doc, rules):
     """Attach a relation class to every edge. Index follows linkStyle numbering."""
-    unknown, out = [], []
+    unknown, mismatched, out = [], [], []
     for i, e in enumerate(doc.edges):
         style = mermaid_doc.style_for(doc, i)
-        key = (style.get("stroke", "").lower(), e.dashed)
-        spec = rules["_by_style"].get(key)
+        stroke = style.get("stroke", "").lower()
+        spec = rules["_by_stroke"].get(stroke)
         if spec is None:
             spec = rules["unknown"]
             if spec.get("reject"):
-                unknown.append(f"line {e.line}: {e.src} -> {e.dst} "
-                               f"stroke={key[0] or '<none>'} 箭头={'虚' if key[1] else '实'}")
+                unknown.append(f"line {e.line}: {e.src} -> {e.dst} stroke={stroke or '<none>'}")
+        elif spec.get("reject") or spec.get("syntax") != arrow_form(e):
+            mismatched.append(f"line {e.line}: {e.src} -> {e.dst} 配色 {stroke} 要求箭头 "
+                              f"{spec.get('syntax', '?')}，实际是 {arrow_form(e)}")
+            spec = rules["unknown"]
         out.append({"src": e.src, "dst": e.dst, "label": e.label, "line": e.line,
                     "index": i, "kind": spec["class"],
-                    "stroke": spec.get("stroke") or key[0], "dash": key[1]})
+                    "stroke": spec.get("stroke") or stroke, "dash": bool(spec.get("dash"))})
     if unknown:
         raise SystemExit("配色未在 graph-rules.json 的 palette 中登记：\n  " + "\n  ".join(unknown))
+    if mismatched:
+        raise SystemExit("配色与箭头写法矛盾（箭头定类别，配色只是把它画出来）：\n  " + "\n  ".join(mismatched))
     legend = doc.legend_nodes()
     return [e for e in out if e["src"] not in legend and e["dst"] not in legend]
 

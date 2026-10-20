@@ -3,9 +3,9 @@
 The edge class - and therefore its colour - is read off the file, not from a
 hand-maintained table:
 
-    -->                       数据流 (palette class with ordering: true)
-    -.->                      工作流
-    -.-> with a ？ in label    待定
+    -->                       the palette entry declaring syntax "solid"
+    -.->                      the entry declaring "dashed"
+    -.-> with a ？ in label    the entry declaring "dashed?"
 
 so the tool is idempotent: run it twice, nothing changes. Colours come from
 graph-rules.json, which is also what the interactive renderer uses - the two can
@@ -37,19 +37,18 @@ STYLE_RE = re.compile(r"^\s*%+\s*样式")
 
 
 def classify(label: str, dashed: bool, rules):
-    """The only judgement an editor makes: solid/dashed, plus ？ for undecided."""
-    classes = {p["class"]: p for p in rules["palette"]}
-    if not dashed:
-        ordering = [p for p in rules["palette"] if p.get("ordering")]
-        return ordering[0]["class"] if ordering else next(iter(classes))
-    if "？" in label or "?" in label:
-        for p in rules["palette"]:
-            if p.get("warn"):
-                return p["class"]
-    for p in rules["palette"]:
-        if p["dash"] and not p.get("warn"):
-            return p["class"]
-    return next(iter(classes))
+    """The only judgement an editor makes: which arrow, and whether the label says ？.
+
+    Matched against each palette entry's declared `syntax`, not against dash: once two
+    classes share a line style (both solid, differing only in colour), inferring the
+    class from the dash silently maps every edge onto whichever entry happens to be
+    listed first.
+    """
+    wanted = "dashed?" if (dashed and ("？" in label or "?" in label)) else ("dashed" if dashed else "solid")
+    for entry in rules["palette"]:
+        if entry.get("syntax") == wanted:
+            return entry["class"]
+    return next(iter({p["class"]: p for p in rules["palette"]}))
 
 
 def main() -> int:

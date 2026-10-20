@@ -1,26 +1,29 @@
 {
-  "_comment": "语义规则：把标准 Mermaid 的视觉特征（描边色 + 虚线）映射成关系类别。改语义改这里，不改代码。",
+  "_comment": "语义规则：箭头写法（--> / -.-> / -.->带？）决定关系类别，配色由本文件赋予。改配色或改语义都改这里，不改代码。",
   "palette": [
     {
-      "stroke": "#2563eb",
+      "stroke": "#F97316",
       "dash": false,
       "class": "data",
+      "syntax": "solid",
       "title": "数据流",
       "desc": "搬内容：下游消费它，不改变下一步做谁",
       "ordering": true
     },
     {
-      "stroke": "#f97316",
-      "dash": true,
+      "stroke": "#2563EB",
+      "dash": false,
       "class": "flow",
+      "syntax": "dashed",
       "title": "工作流",
       "desc": "搬决策：下游因它被触发或改变走向",
       "ordering": false
     },
     {
-      "stroke": "#a855f7",
+      "stroke": "#A855F7",
       "dash": true,
       "class": "open",
+      "syntax": "dashed?",
       "title": "待定",
       "desc": "既是内容又是决策，勿据此推导开发顺序",
       "ordering": false,
