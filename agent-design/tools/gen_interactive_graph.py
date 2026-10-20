@@ -84,6 +84,11 @@ def classify(doc, rules):
     if mismatched:
         raise SystemExit("配色与箭头写法矛盾（箭头定类别，配色只是把它画出来）：\n  " + "\n  ".join(mismatched))
     legend = doc.legend_nodes()
+    # 副本先归并回原件，且在这里做：分层、环、覆盖、HTML 都必须看到同一个拓扑。
+    # 放在调用方做的话，多一个调用点就多一份口径
+    alias = doc.aliases()
+    for e in out:
+        e["src"], e["dst"] = alias.get(e["src"], e["src"]), alias.get(e["dst"], e["dst"])
     return [e for e in out if e["src"] not in legend and e["dst"] not in legend]
 
 
@@ -320,7 +325,7 @@ def order_layers(layers, chains, sweeps):
     return pos
 
 
-def lane_route(edges, level_of, x_of, y_of, col_w, out_y, in_y):
+def lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y):
     """Route forward edges through per-gap lanes.
 
     Without lanes every long edge crosses a column gap on the same vertical, so
@@ -351,7 +356,7 @@ def lane_route(edges, level_of, x_of, y_of, col_w, out_y, in_y):
     for idx, e in enumerate(edges):
         la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
         if la < lb:
-            pts = [(x_of[la] + col_w.get(la, 0), out_y[idx])]
+            pts = [(x_of[la] + w_of.get(e["src"], col_w.get(la, 0)), out_y[idx])]
             for g in range(la, lb):
                 y = in_y[idx] if g == lb - 1 else y_of.get(("d", (idx, g + 1)), in_y[idx])
                 pts.append((lane_x[(g, idx)], y))
@@ -565,11 +570,6 @@ def build(config_path):
     sy = layout.get("row_spacing", 66)
     h = layout.get("node_height", 42)
 
-    # 副本先归并回原件：图上可以多画几份，拓扑上仍是一个节点
-    alias = doc.aliases()
-    for e in edges:
-        e["src"], e["dst"] = alias.get(e["src"], e["src"]), alias.get(e["dst"], e["dst"])
-
     scc = scc_ids(edges)
     # Layering is a drawing concern: it uses every relation, SCC-condensed. It used
     # to reuse the data-flow class, which silently coupled layout to semantics - and
@@ -668,7 +668,7 @@ def build(config_path):
 
     out_y = {idx: slot_y(e["src"], idx, out_slots[e["src"]], False) for idx, e in enumerate(edges)}
     in_y = {idx: slot_y(e["dst"], idx, in_slots[e["dst"]], True) for idx, e in enumerate(edges)}
-    geo = lane_route(edges, level_of, x_of, y_of, col_w, out_y, in_y)
+    geo = lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y)
 
     # 反向边与同列边：端点必须落在节点框边上，不能悬在顶边外面
     for idx, e in enumerate(edges):
@@ -690,6 +690,25 @@ def build(config_path):
     segs = [(owner, _boxed(_seg(a, b))) for owner, pts in geo.items()
             for a, b in zip(pts, pts[1:])]
     rects = [(x_of[level_of.get(n, 0)] + w_of[n] / 2, y_of[("n", n)] - h / 2, w_of[n], h) for n in ids]
+
+    # 分组框：成员按各自的列散布，框就按成员实际位置包一圈。以前交互图不画分组，
+    # 于是它比 Mermaid 版难读，谁都不看它 —— 布局做得再好也没人看得见
+    pad_g = layout.get("group_padding", 22)
+    boxes = {}
+    for n in ids:
+        sub = doc.nodes.get(n).subgraph if n in doc.nodes else ""
+        if not sub or sub in doc.legend_ids():
+            continue
+        left, top = x_of[level_of.get(n, 0)], y_of[("n", n)] - h / 2
+        box = boxes.setdefault(sub, [left, top, left + w_of[n], top + h, []])
+        box[0], box[1] = min(box[0], left), min(box[1], top)
+        box[2], box[3] = max(box[2], left + w_of[n]), max(box[3], top + h)
+        box[4].append(n)
+    groups = [{"id": k, "title": doc.subgraphs.get(k, k),
+               "x": round(b[0] - pad_g, 1), "y": round(b[1] - pad_g - 14, 1),
+               "w": round(b[2] - b[0] + pad_g * 2, 1), "h": round(b[3] - b[1] + pad_g * 2 + 14, 1),
+               "members": sorted(b[4])}
+              for k, b in sorted(boxes.items())]
     labels = []
     for idx, e in enumerate(edges):
         labels.append({"for": f"{e['src']}->{e['dst']}", "idx": idx, "pts": geo[idx],
@@ -708,7 +727,8 @@ def build(config_path):
         meta = dict(info.get(n, {}))
         desc = meta.pop(desc_col, "")
         nodes.append({"id": n, "x": x_of[level_of.get(n, 0)], "y": y_of[("n", n)] - h / 2,
-                      "level": level_of.get(n, 0), "w": w, "h": h,
+                      "level": level_of.get(n, 0), "w": w_of[n], "h": h,
+                      "label": doc.nodes[n].label if n in doc.nodes else n,
                       "name": meta.pop("name", "") or (doc.nodes[n].label if n in doc.nodes else ""),
                       "desc": desc,
                       "extra": [[panel_labels.get(k, k), v] for k, v in meta.items() if v],
@@ -739,6 +759,7 @@ def build(config_path):
         "dashed": {p["class"]: bool(p["dash"]) for p in rules["palette"]},
         "box": {"w": w, "h": h},
         "level_x": {str(l): round(x, 1) for l, x in x_of.items()},
+        "groups": groups,
         "canvas": {"w": (x_of[max(x_of, default=0)] + col_w.get(max(x_of, default=0), 0) + 120),
                    "h": (height + 1) * sy + 160},
         "labels": [{"for": l["for"], "idx": l["idx"], "lx": round(l["lx"], 1),

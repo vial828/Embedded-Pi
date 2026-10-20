@@ -36,6 +36,9 @@ DATA_RE = re.compile(r"^const D = .*$", re.M)
 LOGIC_RE = re.compile(r"/\*LOGIC-START\*/(.*?)/\*LOGIC-END\*/", re.S)
 
 
+RULES = DESIGN / "tools" / "graph-rules.json"
+
+
 @pytest.fixture(scope="module")
 def built():
     return graph_tool.build(CONFIG)[2]
@@ -157,6 +160,31 @@ def test_edge_endpoints_touch_their_nodes(built):
              for e in built["edges"]
              if _gap(e["pts"][0], nodes[e["s"]]) > 1 or _gap(e["pts"][-1], nodes[e["t"]]) > 1]
     assert not loose, f"{len(loose)} 条边端点悬空，例如 {loose[:4]}"
+
+
+def test_a_box_is_sized_to_its_own_label(built):
+    """Uniform box width hands every node the longest label's whitespace.
+
+    This broke once silently: per-node widths were computed and used for collision and
+    columns, while the drawn rect still used the widest value. The reported average width
+    shrank and the picture did not - a statistic that describes the code instead of the
+    render is worse than no statistic.
+    """
+    lay = json.loads(RULES.read_text(encoding="utf-8"))["layout"]
+    pad, lo, hi = lay.get("node_padding", 9), lay.get("node_min_width", 56), lay.get("node_max_width", 132)
+    too_wide = [n["id"] for n in built["nodes"]
+                if n["w"] > min(hi, max(lo, len(n["label"]) * 5.9 + 2 * pad)) + 1]
+    assert not too_wide, f"框比自己的标签宽，白占了别人的空白: {too_wide}"
+    assert len({round(n["w"]) for n in built["nodes"]}) > 1, "框宽全相等说明又退回统一宽度了"
+
+
+def test_group_boxes_contain_their_members(built):
+    """A region box that clips a node mislabels which slice belongs to which layer."""
+    pos = {n["id"]: n for n in built["nodes"]}
+    clipped = [f'{g["title"]}/{m}' for g in built["groups"] for m in g["members"]
+               if m in pos and not (g["x"] <= pos[m]["x"] and pos[m]["x"] + pos[m]["w"] <= g["x"] + g["w"]
+                                    and g["y"] <= pos[m]["y"] and pos[m]["y"] + pos[m]["h"] <= g["y"] + g["h"])]
+    assert not clipped, f"分组框切到了成员: {clipped}"
 
 
 # Known, not laundered: with 69 labelled edges the memory cluster (S12-S17) has no clean

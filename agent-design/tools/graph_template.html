@@ -37,6 +37,8 @@
       stroke-linejoin:round;pointer-events:none}
  .node text{font-size:12px;font-weight:600;fill:#0F172A;pointer-events:none}
  .node{cursor:pointer} .lv{fill:#94A3B8;font-size:11px;font-weight:700}
+ .grp rect{fill:#F8FAFC;fill-opacity:.55;stroke:#CBD5E1;stroke-width:1.2;stroke-dasharray:5 4;pointer-events:none}
+ .grpt{fill:#64748B;font-size:12px;font-weight:700;pointer-events:none}
 </style></head><body>
 <div id=bar>
   <b>__TITLE__</b>
@@ -160,6 +162,13 @@ function draw(){
   const maxLv = Math.max(...D.nodes.map(n => n.level));
   for(let l = 0; l <= maxLv; l++)
     g.appendChild(el('text', {x:(D.level_x[l] ?? (l*D.sx)) + BX.w/2, y:18, class:'lv'})).textContent = 'L' + l;
+
+  (D.groups || []).forEach(gr => {
+    const gg = el('g', {class:'grp'});
+    gg.appendChild(el('rect', {x:gr.x, y:gr.y, width:gr.w, height:gr.h, rx:10}));
+    const t = el('text', {x:gr.x + 10, y:gr.y + 15, class:'grpt'});
+    t.textContent = gr.title; gg.appendChild(t); g.appendChild(gg);
+  });
 
   D.edges.forEach((e, i) => {
     if(!state.on[e.kind]) return;
