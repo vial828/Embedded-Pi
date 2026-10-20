@@ -530,7 +530,12 @@ def build(config_path):
     h = layout.get("node_height", 42)
 
     scc = scc_ids(edges)
-    ordering = {p["class"] for p in rules["palette"] if p.get("ordering")}
+    # Layering is a drawing concern: it uses every relation, SCC-condensed. It used
+    # to reuse the data-flow class, which silently coupled layout to semantics - and
+    # collapsed the whole picture into one column once data flow stopped being the
+    # majority relation.
+    ordering = set(rules.get("layering", {}).get("classes") or
+                   [p["class"] for p in rules["palette"] if p.get("ordering")])
     skip = doc.no_layout_ids()
     level_of, loop, _members = levels(edges, ordering, skip)
 
@@ -633,7 +638,10 @@ def build(config_path):
         "nodes": nodes,
         "edges": out_edges,
         "legend": present,
-        "primary": sorted(ordering),
+        # Focus walks the semantic primary relation (data flow), not the layering set:
+        # "what flows through this node" is a question about content, and lighting up
+        # every control edge too would make focus the same picture as no focus.
+        "primary": sorted(p["class"] for p in rules["palette"] if p.get("ordering")),
         "colours": {p["class"]: p["stroke"] for p in rules["palette"]},
         "dashed": {p["class"]: bool(p["dash"]) for p in rules["palette"]},
         "box": {"w": w, "h": h},

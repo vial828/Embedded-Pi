@@ -39,10 +39,16 @@ CONFIG = DESIGN / "epi-dev-slices-overview.graph.json"
 GENERATOR = TOOLS / "gen_interactive_graph.py"
 GRAPH_HTML = DESIGN / "epi-dev-slices-graph.html"
 
-# The agent loop is a genuine data cycle: context -> task list -> state machine
-# -> current phase back into context. Any other data cycle means a decision was
-# smuggled into a data pipe.
-DECLARED_ORDERING_CYCLES = [frozenset({"S17", "S18", "S19"})]
+# No data cycle is expected. The agent loop (context -> task sequence -> state
+# machine -> current phase back into context) used to be declared here as a legal
+# data cycle; it is really control flow driving a loop, and only its content-carrying
+# legs (S19 -> S17 phase/task, S17 -> S18 context) are data. Reclassifying S18 -> S19
+# as workflow broke the cycle, which is the correct reading: a loop of driving should
+# not appear in a data-flow graph at all.
+#
+# So the invariant got stronger rather than weaker: any data cycle now means someone
+# put a decision into a data pipe.
+DECLARED_ORDERING_CYCLES: list[frozenset[str]] = []
 
 
 @pytest.fixture(scope="module")

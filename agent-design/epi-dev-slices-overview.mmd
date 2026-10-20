@@ -73,69 +73,69 @@ flowchart LR
   end
 
   %% 数据流（橙实线，箭头 -->）：这条边存在的理由是交付产物
-  S01 -.->| 调用| S02
-  S02 -->| config.yaml| S03
-  S02 -->| 模板骨架| S04
-  S04 -->| system-design.md| S05
-  S05 -->| sections| S06
-  S06 -->| schema| S07
+  S01 -.-> | 调用| S02
+  S02 -.-> | config.yaml| S03
+  S02 -.-> | 模板骨架| S04
+  S04 -.-> | system-design.md| S05
+  S05 -.-> | sections| S06
+  S06 -.-> | schema| S07
 
-  S02 -->| Docs布局| S08
-  S02 -->| Docs布局| S09
-  S02 -->| Docs布局| S10
-  S09 -->| req节点| S11
-  S10 -->| reg节点| S11
+  S02 -.-> | Docs布局| S08
+  S02 -.-> | Docs布局| S09
+  S02 -.-> | Docs布局| S10
+  S09 -.-> | req节点| S11
+  S10 -.-> | reg节点| S11
 
-  S12 -->| 片段| S13
-  S13 -->| 约束/决策| S14
-  S08 -->| rules| S15
-  S09 -->| req_index| S15
-  S10 -->| reg_index| S15
-  S11 -->| artifact_graph| S15
-  S14 -->| candidate| S15
-  S13 -->| long base| S16
-  S15 -.->| 晋升后的规则| S16
-  S12 -->| working| S17
-  S16 -->| pack| S17
+  S12 -.-> | 片段| S13
+  S13 -.-> | 约束/决策| S14
+  S08 -.-> | rules| S15
+  S09 -.-> | req_index| S15
+  S10 -.-> | reg_index| S15
+  S11 -.-> | artifact_graph| S15
+  S14 -.-> | candidate| S15
+  S13 --> | long base| S16
+  S15 -.-> | 晋升后的规则| S16
+  S12 --> | working| S17
+  S16 --> | pack| S17
 
 
-  S03 -->| 配置| S18
-  S18 -->| 任务序列| S19
-  S19 -.->| 调用 LLM| S20
-  S19 -.->| 调度| S21
-  S21 -->| 产物| S22
-  S22 -->| 编译结果| S23
-  S22 -->| 工件| S24
-  S22 -->| 错误流| S25
-  S23 -->| 静态告警| S25
-  S24 -->| 仿真结果| S25
-  S25 -->| 分类标签| S26
+  S03 -.-> | 配置| S18
+  S18 -.-> | 任务序列| S19
+  S19 -.-> | 调用 LLM| S20
+  S19 -.-> | 调度| S21
+  S21 -.-> | 产物| S22
+  S22 -.-> | 编译结果| S23
+  S22 -.-> | 工件| S24
+  S22 -.-> | 错误流| S25
+  S23 -.-> | 静态告警| S25
+  S24 -.-> | 仿真结果| S25
+  S25 -.-> | 分类标签| S26
 
-  S19 -->| 追踪规格| S27
-  S13 -->| 决策| S28
-  S22 -->| 编译结果| S29
-  S23 -->| 静态结果| S29
-  S24 -->| 仿真结果| S29
-  S27 -->| 证据| S30
-  S28 -->| 证据| S30
-  S29 -->| 证据| S30
-  S30 -.->| 判定门控| S31
+  S19 -.-> | 追踪规格| S27
+  S13 -.-> | 决策| S28
+  S22 -.-> | 编译结果| S29
+  S23 -.-> | 静态结果| S29
+  S24 -.-> | 仿真结果| S29
+  S27 -.-> | 证据| S30
+  S28 -.-> | 证据| S30
+  S29 -.-> | 证据| S30
+  S30 -.-> | 判定门控| S31
 
   %% 运行时控制（控制流：蓝实线，箭头写 -.->）
-  S17 -.->| 上一轮上下文回写| S12
-  S15 -.->| ？晋升写入| S13
-  S20 -->| 候选提名| S14
-  S19 -.->| 当前task查询| S16
-  S19 -->| 当前phase/task| S17
-  S17 -->| 上下文输入| S18
-  S26 -.->| 重试反馈| S19
-  S17 -->| context pack| S20
-  S20 -.->| 工具调用计划| S21
-  S21 -->| 执行记录| S27
-  S22 -->| 编译记录| S27
-  S23 -->| 静态记录| S27
-  S24 -->| 仿真记录| S27
-  S19 -->| 状态转移事件| S28
+  S17 -.-> | 上一轮上下文回写| S12
+  S15 -.-> | ？晋升写入| S13
+  S20 -.-> | 候选提名| S14
+  S19 -.-> | 当前task查询| S16
+  S19 --> | 当前phase/task| S17
+  S17 --> | 上下文输入| S18
+  S26 -.-> | 重试反馈| S19
+  S17 --> | context pack| S20
+  S20 -.-> | 工具调用计划| S21
+  S21 -.-> | 执行记录| S27
+  S22 -.-> | 编译记录| S27
+  S23 -.-> | 静态记录| S27
+  S24 -.-> | 仿真记录| S27
+  S19 -.-> | 状态转移事件| S28
 
   IN_TOOL -->| env| S03
   IN_PRD -->| 约束| S04
@@ -158,61 +158,61 @@ flowchart LR
   linkStyle 1 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 2 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
   linkStyle 3 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 4 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 5 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 6 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 7 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 8 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 9 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 10 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 11 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 12 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 13 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 14 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 15 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 16 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 17 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 18 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 19 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 20 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 4 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 5 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 6 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 7 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 8 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 9 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 10 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 11 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 12 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 13 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 14 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 15 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 16 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 17 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 18 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 19 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 20 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 21 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 22 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 23 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 24 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 25 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 26 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 25 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 26 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 27 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 28 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 29 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 30 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 31 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 32 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 33 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 34 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 35 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 36 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 37 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 38 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 39 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 40 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 41 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 42 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 43 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 29 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 30 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 31 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 32 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 33 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 34 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 35 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 36 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 37 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 38 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 39 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 40 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 41 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 42 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 43 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 44 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 45 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 46 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
-  linkStyle 47 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 47 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 48 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 49 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 50 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 51 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 52 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 53 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 54 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 55 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 56 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 57 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 58 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 54 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 55 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 56 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 57 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 58 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 59 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 60 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 61 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0

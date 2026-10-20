@@ -29,7 +29,8 @@ def main() -> int:
     doc = mermaid_doc.parse((base / cfg["mmd"]).read_text(encoding="utf-8"))
     edges = g.classify(doc, rules)
 
-    ordering = {p["class"] for p in rules["palette"] if p.get("ordering")}
+    ordering = set(rules.get("layering", {}).get("classes") or
+                   [p["class"] for p in rules["palette"] if p.get("ordering")])
     labelled = {p["class"]: p["title"] for p in rules["palette"]}
     print(f"{cfg['mmd']}  排序类别: {' + '.join(sorted(labelled[c] for c in ordering))}")
     kinds = Counter(e["kind"] for e in edges)

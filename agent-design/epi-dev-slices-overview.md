@@ -80,69 +80,69 @@ flowchart LR
   end
 
   %% 数据流（橙实线，箭头 -->）：这条边存在的理由是交付产物
-  S01 -.->| 调用| S02
-  S02 -->| config.yaml| S03
-  S02 -->| 模板骨架| S04
-  S04 -->| system-design.md| S05
-  S05 -->| sections| S06
-  S06 -->| schema| S07
+  S01 -.-> | 调用| S02
+  S02 -.-> | config.yaml| S03
+  S02 -.-> | 模板骨架| S04
+  S04 -.-> | system-design.md| S05
+  S05 -.-> | sections| S06
+  S06 -.-> | schema| S07
 
-  S02 -->| Docs布局| S08
-  S02 -->| Docs布局| S09
-  S02 -->| Docs布局| S10
-  S09 -->| req节点| S11
-  S10 -->| reg节点| S11
+  S02 -.-> | Docs布局| S08
+  S02 -.-> | Docs布局| S09
+  S02 -.-> | Docs布局| S10
+  S09 -.-> | req节点| S11
+  S10 -.-> | reg节点| S11
 
-  S12 -->| 片段| S13
-  S13 -->| 约束/决策| S14
-  S08 -->| rules| S15
-  S09 -->| req_index| S15
-  S10 -->| reg_index| S15
-  S11 -->| artifact_graph| S15
-  S14 -->| candidate| S15
-  S13 -->| long base| S16
-  S15 -.->| 晋升后的规则| S16
-  S12 -->| working| S17
-  S16 -->| pack| S17
+  S12 -.-> | 片段| S13
+  S13 -.-> | 约束/决策| S14
+  S08 -.-> | rules| S15
+  S09 -.-> | req_index| S15
+  S10 -.-> | reg_index| S15
+  S11 -.-> | artifact_graph| S15
+  S14 -.-> | candidate| S15
+  S13 --> | long base| S16
+  S15 -.-> | 晋升后的规则| S16
+  S12 --> | working| S17
+  S16 --> | pack| S17
 
 
-  S03 -->| 配置| S18
-  S18 -->| 任务序列| S19
-  S19 -.->| 调用 LLM| S20
-  S19 -.->| 调度| S21
-  S21 -->| 产物| S22
-  S22 -->| 编译结果| S23
-  S22 -->| 工件| S24
-  S22 -->| 错误流| S25
-  S23 -->| 静态告警| S25
-  S24 -->| 仿真结果| S25
-  S25 -->| 分类标签| S26
+  S03 -.-> | 配置| S18
+  S18 -.-> | 任务序列| S19
+  S19 -.-> | 调用 LLM| S20
+  S19 -.-> | 调度| S21
+  S21 -.-> | 产物| S22
+  S22 -.-> | 编译结果| S23
+  S22 -.-> | 工件| S24
+  S22 -.-> | 错误流| S25
+  S23 -.-> | 静态告警| S25
+  S24 -.-> | 仿真结果| S25
+  S25 -.-> | 分类标签| S26
 
-  S19 -->| 追踪规格| S27
-  S13 -->| 决策| S28
-  S22 -->| 编译结果| S29
-  S23 -->| 静态结果| S29
-  S24 -->| 仿真结果| S29
-  S27 -->| 证据| S30
-  S28 -->| 证据| S30
-  S29 -->| 证据| S30
-  S30 -.->| 判定门控| S31
+  S19 -.-> | 追踪规格| S27
+  S13 -.-> | 决策| S28
+  S22 -.-> | 编译结果| S29
+  S23 -.-> | 静态结果| S29
+  S24 -.-> | 仿真结果| S29
+  S27 -.-> | 证据| S30
+  S28 -.-> | 证据| S30
+  S29 -.-> | 证据| S30
+  S30 -.-> | 判定门控| S31
 
   %% 运行时控制（控制流：蓝实线，箭头写 -.->）
-  S17 -.->| 上一轮上下文回写| S12
-  S15 -.->| ？晋升写入| S13
-  S20 -->| 候选提名| S14
-  S19 -.->| 当前task查询| S16
-  S19 -->| 当前phase/task| S17
-  S17 -->| 上下文输入| S18
-  S26 -.->| 重试反馈| S19
-  S17 -->| context pack| S20
-  S20 -.->| 工具调用计划| S21
-  S21 -->| 执行记录| S27
-  S22 -->| 编译记录| S27
-  S23 -->| 静态记录| S27
-  S24 -->| 仿真记录| S27
-  S19 -->| 状态转移事件| S28
+  S17 -.-> | 上一轮上下文回写| S12
+  S15 -.-> | ？晋升写入| S13
+  S20 -.-> | 候选提名| S14
+  S19 -.-> | 当前task查询| S16
+  S19 --> | 当前phase/task| S17
+  S17 --> | 上下文输入| S18
+  S26 -.-> | 重试反馈| S19
+  S17 --> | context pack| S20
+  S20 -.-> | 工具调用计划| S21
+  S21 -.-> | 执行记录| S27
+  S22 -.-> | 编译记录| S27
+  S23 -.-> | 静态记录| S27
+  S24 -.-> | 仿真记录| S27
+  S19 -.-> | 状态转移事件| S28
 
   IN_TOOL -->| env| S03
   IN_PRD -->| 约束| S04
@@ -165,61 +165,61 @@ flowchart LR
   linkStyle 1 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 2 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
   linkStyle 3 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 4 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 5 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 6 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 7 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 8 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 9 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 10 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 11 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 12 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 13 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 14 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 15 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 16 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 17 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 18 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 19 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 20 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 4 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 5 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 6 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 7 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 8 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 9 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 10 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 11 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 12 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 13 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 14 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 15 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 16 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 17 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 18 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 19 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 20 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 21 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 22 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 23 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 24 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 25 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 26 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 25 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 26 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 27 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 28 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 29 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 30 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 31 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 32 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 33 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 34 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 35 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 36 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 37 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 38 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 39 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 40 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 41 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 42 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 43 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 29 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 30 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 31 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 32 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 33 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 34 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 35 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 36 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 37 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 38 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 39 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 40 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 41 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 42 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 43 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 44 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 45 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 46 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
-  linkStyle 47 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 47 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 48 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 49 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 50 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 51 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 52 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 53 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 54 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 55 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 56 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 57 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 58 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 54 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 55 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 56 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 57 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 58 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 59 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 60 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 61 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
@@ -237,44 +237,50 @@ flowchart LR
 
 ### 1.1 边的图例
 
-**判据只有一问：这条边搬的是内容，还是决策？**
-
-**类别由箭头写法决定，颜色只是把它画出来**——两者矛盾时工具直接报错，不会静默画出另一张图。
+**类别由箭头写法决定，颜色只是把它画出来** —— 两者矛盾时工具直接报错，不会静默画出另一张图。
 
 | 箭头写法 | 颜色 | 类 | 含义 |
 |---|---|---|---|
-| `-->` | 橙 `#F97316` 实线 | 数据流 | **搬内容**：下游消费它，不改变"下一步做谁" |
-| `-.->` | 蓝 `#2563EB` 实线 | 工作流 | **搬决策**：下游因它被触发或改变走向 |
-| `-.->` 且标签以 `？` 开头 | 紫 `#A855F7` **虚线** | 待定 | 既是内容又是决策，**尚未裁定，勿据此推导开发顺序** |
+| `-->` | 橙 `#F97316` 实线 | 数据流 | **纯搬内容**：这条边的全部理由是把内容交到下游手上 |
+| `-.->` | 蓝 `#2563EB` 实线 | 工作流 | **驱动下游**：这条边存在的理由是让下游开始/改变做事 |
+| `-.->` 且标签以 `？` 开头 | 紫 `#A855F7` **虚线** | 待定 | 主导性确实争不动，**勿据此推导任何东西** |
 
-> 两个类别都是实线，靠颜色区分；**虚线现在只有一个意思：待定**。以前虚线兼着"工作流"和"待定"两个含义，是误读来源。
+**判据为什么不是「搬内容还是搬决策」**：控制边必然携带数据（调谁、传什么、返回什么），那个问法对任何一条边都能自圆其说 —— 它不是二分。真正的判据是**主导性**：把数据成分去掉，这条边还有理由存在吗？
 
-当前 74 条边：数据流 57 / 工作流 11 / 待定 6。
+按这条判据，**绝大部分边是工作流**：阶段推进、调用、触发、反馈，都因「让下游开始做事」而存在。够格当数据流的只有**纯搬内容**的两类：
 
-### 1.2 开发顺序不在图里，由数据流推导
+1. **外部输入注入** —— `IN_PRD / IN_BSP / IN_HW / IN_STD / IN_TOOL → 各切片`。外部资料不会「调用」谁
+2. **提示词片段的走向** —— `S13 → S16`、`S12 → S17`、`S16 → S17`、`S17 → S20`。片段从记忆与召回流进装配器、再装进 LLM 请求，全程没有「该你了」的含义。**这条链必须是数据流，否则提示词内容的来源在图上断开**
 
-开发依赖是**派生量**，不是原始事实，所以不画、不手写，用脚本算：
+标定例：**`S01 → S02` 是工作流** —— CLI 入口调用布局生成，「CLI 契约」只是调用参数。把它当数据流，就是把「每条边都带数据」误当成「每条边都是数据流」。
 
-```
-python tools/derive_dev_order.py
-```
+> 类别名用「工作流」与术语表冲突（那里工作流 = 端到端执行）。文档里提到边类别时一律写全「工作流边」，端到端执行一律写「工作流（端到端）」。是否给边类别改名（如「控制边」）待裁。
+>
+> 两个类别都是实线，靠颜色区分；**虚线现在只有一个意思：待定**。
 
-公式：**开发顺序 = 数据流图缩点后的拓扑序**。工作流边不参与排序 —— 反馈回路本就该成环，把它们算进去会得出「S12–S26 必须同时开工」这种废话。
+当前 69 条边（不含图例）：数据流 20 / 工作流 48 / 待定 1。
 
-数据流图当前**只有一个环：`S17 → S18 → S19 → S17`**，即 agent 回路本身（上下文 → 任务序列 → 状态机 → 当前 phase 回写上下文）。这三片必须一起设计或先钉接口。该环已在 `tests/test_slices_overview.py` 里声明为唯一合法数据环；**出现新的数据环即测试失败**，因为那意味着有人把决策塞进了数据管道。
+### 1.2 开发顺序不在图里（也不再推导）
+
+旧规则：**开发顺序 = 数据流图缩点后的拓扑序**。它建立在「数据流是主关系」上。按上面的判据重划后数据流只剩 20 条，**用它分层会把 31 个切片压进同一列，用它排序等于没有顺序** —— 推导作废。
+
+| 关系 | 用途 | 在哪里 |
+|---|---|---|
+| **开发依赖** | 实现某片前必须完成哪片 | **WBS 表「开发依赖」列，人手写** |
+| **分层 layering** | 只决定图上谁左谁右 | `graph-rules.json` 的 `layering.classes`，含全部三类，缩点破环 |
+| **数据流** | 内容从哪来到哪去 | 语义类别，**不再参与排序** |
+
+三者解耦是这次整改的结果，不是前提。以前它们共用「数据流」一个关系，于是一次语义重分类会静默改变开发顺序和图布局 —— 顺序随分类漂移，等于没有顺序。
+
+数据流图当前**无环**（测试声明为空集）。agent 回路 `S17 → S18 → S19 → S17` 以前被声明为「合法数据环」，其实它是**控制回路**：只有携带内容的两条腿（`S19 → S17` 当前 phase、`S17 → S18` 上下文）是数据。`S18 → S19 任务序列` 归回工作流后环自然消失 —— **一个驱动的循环本就不该出现在数据流图里**。不变量因此变更强：现在出现任何数据环，都意味着有人把决策塞进了数据管道。
 
 ### 1.3 待定边（需架构裁定）
 
 | 边 | 为什么两难 |
 |---|---|
-| `S17 ？上一轮上下文回写 S12` | 内容是数据，但它决定数据流图是否有环 |
-| `S17 ？context pack S20` | 是内容，但决定模型看到什么 = 决定行为 |
-| `S19 ？phase/task S20` | phase/task 是内容，调用 LLM 是控制，目前一条边扛两件事 |
-| `S19 ？追踪 S27` | 追踪规格是内容，触发记录是控制 |
-| `S15 ？promotion S16` | 晋升结果是内容，但改变后续召回范围 |
-| `S30 ？判定 S31` | 判定结果既是产物又是闸门 |
+| `S15 ？晋升写入 S13` | 写入的是记录（数据），但「晋升」这个动作改变了后续能召回什么（控制） |
 
-裁定方式：**只改箭头和 `？`**——`-->` 数据流，`-.->` 工作流，`-.->` 且标签含 `？` 待定。改完跑 `tools/apply_edge_style.py`，配色自动跟随；手工改颜色无效，且会被一致性检查拦下。
+以前这里有 6 条。五条按主导性归位：`S17 → S12 回写`、`S15 → S16 改召回范围` 归工作流（改变下一步做谁）；`S17 → S20 context pack` 归数据流；`S19 → S27 追踪规格`、`S30 → S31 判定门控` 各自归位。**它们当初看起来不可判，是因为旧判据本身不是二分。**
 
 ### 1.4 工具链
 
@@ -284,7 +290,7 @@ python tools/derive_dev_order.py
 |---|---|
 | `python tools/apply_edge_style.py <mmd> <md>` | 按箭头规则重生成配色块，并把 `.mmd` 同步进 `.md`。幂等 |
 | `python tools/gen_interactive_graph.py` | 生成可交互 HTML（`--check` 查过期，`--open` 直接打开） |
-| `python tools/derive_dev_order.py` | 由数据流推导开发顺序，并列出数据环 |
+| `python tools/derive_dev_order.py` | 报告**图上分层**与数据环。**不再等于开发顺序**，开发顺序在 WBS 表里手写 |
 | `python tools/sync_diagram_md.py <mmd> <md> --check` | 只检查 `.md` 内嵌图是否落后于 `.mmd` |
 | `pytest tests/test_slices_overview.py tests/test_slices_graph.py` | 不变量守门 |
 
