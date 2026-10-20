@@ -159,7 +159,7 @@ function draw(){
   const V = visibleEdges();
   const maxLv = Math.max(...D.nodes.map(n => n.level));
   for(let l = 0; l <= maxLv; l++)
-    g.appendChild(el('text', {x:l*D.sx + BX.w/2, y:18, class:'lv'})).textContent = 'L' + l;
+    g.appendChild(el('text', {x:(D.level_x[l] ?? (l*D.sx)) + BX.w/2, y:18, class:'lv'})).textContent = 'L' + l;
 
   D.edges.forEach((e, i) => {
     if(!state.on[e.kind]) return;

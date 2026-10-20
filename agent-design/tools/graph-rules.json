@@ -40,14 +40,16 @@
     "reject": true
   },
   "layout": {
-    "level_spacing": 168,
+    "level_gap": 54,
     "row_spacing": 48,
     "node_height": 30,
     "node_min_width": 56,
     "node_max_width": 132,
     "node_padding": 9,
     "sweeps": 4,
-    "_comment": "node_width 已删除：统一宽度是按最长标签画的，中位标签只有 8 字，于是每个框都按最宽的画"
+    "compact_sweeps": 6,
+    "row_sweeps": 6,
+    "_comment": "level_gap 是列与列之间留的空隙，不是列间距：某列的位置 = 前一列最宽框 + level_gap。以前是统一列间距，框缩小后空隙跟着被放大，整张图横向全是空白"
   },
   "node_info": {
     "md": "epi-dev-slices-overview.md",

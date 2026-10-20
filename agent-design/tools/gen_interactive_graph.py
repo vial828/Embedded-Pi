@@ -90,7 +90,7 @@ def classify(doc, rules):
 # --------------------------------------------------------------------------- #
 # levels: longest path over ordering edges, SCC condensed
 # --------------------------------------------------------------------------- #
-def levels(edges, ordering_classes, skip_nodes):
+def levels(edges, ordering_classes, skip_nodes, sweeps=6):
     data = [(e["src"], e["dst"]) for e in edges
             if e["kind"] in ordering_classes
             and e["src"] not in skip_nodes and e["dst"] not in skip_nodes]
@@ -151,6 +151,41 @@ def levels(edges, ordering_classes, skip_nodes):
             indeg[v] -= 1
             if indeg[v] == 0:
                 q.append(v)
+    # 收紧列位置。最长路径只保证"不违反前后关系"，不保证"挨着放"：一个节点会被它某一条
+    # 最长的链推到很远的列上，于是 S31 落在最右列、离它的调用者 S30 隔了半个图，
+    # 图上就出现"这两个东西为什么离这么远"。这里在每个节点的可行区间内把它拉到邻居中间。
+    preds = collections.defaultdict(set)
+    for u, vs in dag.items():
+        for v in vs:
+            preds[v].add(u)
+    top = max(lvl) if lvl else 0
+    for _ in range(int(sweeps)):
+        moved = False
+        for c in sorted(range(len(comps)), key=lambda c: (lvl[c], c)):
+            lo = max([lvl[p] + 1 for p in preds[c]], default=0)
+            hi = min([lvl[s] - 1 for s in dag[c]], default=top)
+            if lo > hi or not (preds[c] or dag[c]):
+                continue
+            neighbours = [lvl[p] for p in preds[c]] + [lvl[x] for x in dag[c]]
+            neighbours.sort()
+            want = neighbours[len(neighbours) // 2]
+            target = min(max(lo, want), hi)
+            if target != lvl[c]:
+                lvl[c] = target
+                moved = True
+        if not moved:
+            break
+    # 拉拽可能让某条边指回左列；修复到可行分层为止，宁可少收紧也不能画出反向边
+    for _ in range(len(comps) + 1):
+        broken = False
+        for u in dag:
+            for v in dag[u]:
+                if lvl[v] < lvl[u] + 1:
+                    lvl[v] = max(lvl[v], lvl[u] + 1)
+                    broken = True
+        if not broken:
+            break
+
     size = collections.Counter(comp_of.values())
     return ({v: lvl[comp_of[v]] for v in nodes},
             {v for v, i in comp_of.items() if size[i] > 1},
@@ -285,7 +320,7 @@ def order_layers(layers, chains, sweeps):
     return pos
 
 
-def lane_route(edges, level_of, x_of, y_of, w, sx, out_y, in_y):
+def lane_route(edges, level_of, x_of, y_of, col_w, out_y, in_y):
     """Route forward edges through per-gap lanes.
 
     Without lanes every long edge crosses a column gap on the same vertical, so
@@ -293,7 +328,9 @@ def lane_route(edges, level_of, x_of, y_of, w, sx, out_y, in_y):
     Each gap is divided into as many lanes as there are crossings, ordered by
     height, which spreads the bundle and frees space for the labels.
     """
-    gap_w = max(40.0, sx - w)
+    # 每条通道在自己的列间隙里排开：列宽不等时，统一 gap 会把车道推到框上去
+    gap_at = {g: max(36.0, x_of[g + 1] - x_of[g] - max(col_w.get(g, 0), col_w.get(g + 1, 0)))
+              for g in range(min(level_of.values(), default=0), max(level_of.values(), default=0))}
     crossings = collections.defaultdict(list)
     for idx, e in enumerate(edges):
         la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
@@ -308,13 +345,13 @@ def lane_route(edges, level_of, x_of, y_of, w, sx, out_y, in_y):
         rows.sort()
         n = len(rows)
         for k, (_y, idx) in enumerate(rows):
-            lane_x[(g, idx)] = x_of[g] + w + gap_w * (k + 1) / (n + 1)
+            lane_x[(g, idx)] = x_of[g] + col_w.get(g, 0) +                 gap_at.get(g, 60.0) * (k + 1) / (n + 1)
 
     geo = {}
     for idx, e in enumerate(edges):
         la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
         if la < lb:
-            pts = [(x_of[la] + w, out_y[idx])]
+            pts = [(x_of[la] + col_w.get(la, 0), out_y[idx])]
             for g in range(la, lb):
                 y = in_y[idx] if g == lb - 1 else y_of.get(("d", (idx, g + 1)), in_y[idx])
                 pts.append((lane_x[(g, idx)], y))
@@ -524,7 +561,7 @@ def build(config_path):
 
     edges = classify(doc, rules)
     layout = dict(rules.get("layout", {}))
-    sx = layout.get("level_spacing", 250)
+    h_gap = layout.get("level_gap", 54)
     sy = layout.get("row_spacing", 66)
     h = layout.get("node_height", 42)
 
@@ -536,7 +573,7 @@ def build(config_path):
     ordering = set(rules.get("layering", {}).get("classes") or
                    [p["class"] for p in rules["palette"] if p.get("ordering")])
     skip = doc.no_layout_ids()
-    level_of, loop, _members = levels(edges, ordering, skip)
+    level_of, loop, _members = levels(edges, ordering, skip, layout.get("compact_sweeps", 6))
 
     ids = sorted({e["src"] for e in edges} | {e["dst"] for e in edges})
     layers = collections.defaultdict(list)
@@ -561,7 +598,51 @@ def build(config_path):
         offset = (height - len(row)) / 2.0
         for i, it in enumerate(row):
             y_of[it] = (offset + i) * sy + sy / 2
-    x_of = {l: l * sx for l in layers}
+    def refine_y(sweeps):
+        """把每个节点拉向它邻居的高度，再按最小间隔重排本列。
+
+        每列各自居中，等于假设"同一列的东西在垂直上无偏好"。事实不是：邻居在上方，
+        这个节点留在中间就会拖出一条长斜线，并在它原来的高度留下空白。列内顺序按邻居
+        中位数重排、再按最小间隔压紧，空白和斜线一起少掉。
+        """
+        neighbours = collections.defaultdict(list)
+        for e in edges:
+            neighbours[("n", e["src"])].append(("n", e["dst"]))
+            neighbours[("n", e["dst"])].append(("n", e["src"]))
+        for _ in range(int(sweeps)):
+            moved = False
+            for l in sorted(layers):
+                row = layers[l]
+                want = {}
+                for it in row:
+                    near = [y_of[n] for n in neighbours.get(it, []) if n in y_of]
+                    near.sort()
+                    want[it] = near[len(near) // 2] if near else y_of[it]
+                order = sorted(row, key=lambda it: (want[it], str(it)))
+                if order != row:
+                    layers[l] = order
+                    moved = True
+                # 压紧：保持顺序，逐个推到最小间隔，再整体平移对齐期望中心
+                for i, it in enumerate(order):
+                    floor = y_of[order[i - 1]] + sy if i else want[it]
+                    y_of[it] = max(want[it], floor)
+                shift = (sum(want[it] for it in order) / len(order)
+                         - sum(y_of[it] for it in order) / len(order))
+                for it in order:
+                    y_of[it] += shift
+            if not moved:
+                break
+
+    refine_y(layout.get("row_sweeps", 6))
+
+    # 列位置按"前一列最宽的框 + 固定空隙"推出来。统一列间距是框还宽的时候定的，框缩到
+    # 80 上下之后，窄框所在的列之间会空出一整列的宽度 —— 图上那些"距离过长"就是它
+    col_w = {l: max([w_of[it[1]] for it in row if it[0] == "n"], default=min_w)
+             for l, row in layers.items()}
+    x_of, cursor = {}, 0.0
+    for l in sorted(layers):
+        x_of[l] = cursor
+        cursor += col_w[l] + h_gap
 
     # ports: spread edge attach points along the node's left/right edge
     out_slots, in_slots = collections.defaultdict(list), collections.defaultdict(list)
@@ -582,7 +663,7 @@ def build(config_path):
 
     out_y = {idx: slot_y(e["src"], idx, out_slots[e["src"]], False) for idx, e in enumerate(edges)}
     in_y = {idx: slot_y(e["dst"], idx, in_slots[e["dst"]], True) for idx, e in enumerate(edges)}
-    geo = lane_route(edges, level_of, x_of, y_of, w, sx, out_y, in_y)
+    geo = lane_route(edges, level_of, x_of, y_of, col_w, out_y, in_y)
 
     # 反向边与同列边：端点必须落在节点框边上，不能悬在顶边外面
     for idx, e in enumerate(edges):
@@ -652,8 +733,8 @@ def build(config_path):
         "colours": {p["class"]: p["stroke"] for p in rules["palette"]},
         "dashed": {p["class"]: bool(p["dash"]) for p in rules["palette"]},
         "box": {"w": w, "h": h},
-        "sx": sx,
-        "canvas": {"w": (max(level_of.values(), default=0) + 1) * sx + 120,
+        "level_x": {str(l): round(x, 1) for l, x in x_of.items()},
+        "canvas": {"w": (x_of[max(x_of, default=0)] + col_w.get(max(x_of, default=0), 0) + 120),
                    "h": (height + 1) * sy + 160},
         "labels": [{"for": l["for"], "idx": l["idx"], "lx": round(l["lx"], 1),
                     "ly": round(l["ly"], 1), "w": round(l["w"], 1),
