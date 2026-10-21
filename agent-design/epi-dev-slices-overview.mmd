@@ -1,4 +1,4 @@
-%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": false, "useMaxWidth": false}, "layoutOptions": {"elk.spacing.nodeNode": "10", "elk.layered.spacing.nodeNodeBetweenLayers": "22", "elk.spacing.edgeNode": "10", "elk.spacing.edgeEdge": "8", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.layered.compaction.postCompaction": "true", "elk.layered.compaction.postCompaction.constraints": "NODE_DISTANCE COMPONENT_SIZES", "elk.layered.mergeEdges": "true", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=120,left=120,bottom=120,right=120]"}, "themeVariables": {"fontSize": "22px"}}}%%
+%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": false, "useMaxWidth": false}, "layoutOptions": {"elk.spacing.nodeNode": "10", "elk.layered.spacing.nodeNodeBetweenLayers": "22", "elk.spacing.edgeNode": "10", "elk.spacing.edgeEdge": "8", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.layered.compaction.postCompaction": "true", "elk.layered.compaction.postCompaction.constraints": "NODE_DISTANCE COMPONENT_SIZES", "elk.layered.mergeEdges": "true", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=18,left=8,bottom=10,right=8]"}, "themeVariables": {"fontSize": "12px"}}}%%
 %% 方向写在下面的 flowchart 语句里，不写在 elk.direction：Mermaid 的 ELK 集成用图声明
 %% 的方向去设 elk.direction，在 layoutOptions 里写会被静默覆盖（试过一次，无变化）。
 %% 分散用后紧凑治，不用间距和宽高比治：间距是等比缩放，改多少比例还是那个形状。
@@ -6,7 +6,7 @@
 %%   elk.layered.mergeEdges                  平行边合并，少占走边通道 -> 列更窄
 %% 方向保持 LR（流水线语义）。
 %% 字号是唯一的逐框收窄杠杆：框宽 = 标签文字宽 + 内边距，文字宽正比字号。
-%% 13 -> 11 让每列下限同比例下降，整图等比变窄，且不像 useMaxWidth 那样缩放渲染。
+%% 字号当前 12px；再小会影响可读性，再窄就应拆图或减秩。
 %% 反过来，CSS 强行改 .node rect 的 width 会错位：文字位置与边端点按 Mermaid 自测尺寸算。
 %% 布局引擎用 ELK，不用默认 dagre。理由：dagre 把每个节点推到 max(前驱)+1，链一长整层横向散开，
 %% 而且层框只是成员外接框、无任何旋钮。ELK 给了 dagre 没有的三个：
@@ -17,11 +17,6 @@
 %%   elk.compactParts                            多个连通分量紧凑打包，不再各占一片
 %%   elk.edgeRouting                                 正交走边（横平竖直）：这是选定的风格，
 %%                                                   显式写死，不靠 ELK 默认值恰好如此
-%% 【诊断中，看完即回退】fontSize=22px 与 elk.padding=120 都是故意调到夸张，
-%% 用来判断哪条配置真的到达渲染器：
-%%   两个都变 -> 都生效，之前 13->11 只是太微妙
-%%   只有层框变大 -> ELK 配置生效，但字号被预览自带 CSS 覆盖
-%%   两个都不变 -> layoutOptions 没传给 ELK，我一直在对着默认值调参
 %% 若渲染器版本不支持 ELK 会直接报错，此时删掉 defaultRenderer 与 layoutOptions 即回到 dagre。
 flowchart LR
 
