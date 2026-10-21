@@ -32,6 +32,7 @@
  #legend .meta{margin-top:6px;padding-top:6px;border-top:1px dashed #E2E8F0;color:#94A3B8}
  svg{display:block;cursor:grab;user-select:none;-webkit-user-select:none;
      -webkit-touch-callout:none;touch-action:none}
+ #merm .mermaid{background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:4px}
  .dim{opacity:.06} .soft{opacity:.45}
  .lbl{font-size:10.5px;fill:#334155;paint-order:stroke;stroke:#F8FAFC;stroke-width:3.5px;
       stroke-linejoin:round;pointer-events:none}
@@ -49,14 +50,16 @@
   <span>类别</span><span id=filters></span>
   <label><input type=checkbox id=lbls checked> 边标签</label>
   <button id=reset>重置</button>
-  <span id=hint>点节点聚焦 · 拖拽平移 · 滚轮缩放 · Esc 取消</span>
+  <button id=mode class=on>Mermaid视图</button><span id=hint>点节点聚焦 · 拖拽平移 · 滚轮缩放 · Esc 取消</span>
 </div>
 <div id=info class=panel></div>
 <div id=legend class=panel>
   <h4>大图说明 <span id=lgtog>收起 −</span></h4>
   <div id=lgbody></div>
 </div>
+<div id=merm style="margin-top:54px;padding:6px 8px;display:none"><div class="mermaid" id="mmd">__MMD_SOURCE__</div></div>
 <svg id=svg></svg>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
 const D = __DATA__;
 const BX = D.box, COL = D.colours, DASH = D.dashed;
@@ -125,7 +128,27 @@ let tx = 40, ty = 60, sc = 1, drag = null;
 document.getElementById('filters').innerHTML = D.legend.map(l =>
   `<label><input type=checkbox data-c=${l.kind} checked>
    <span class=sw style="border-top:3px ${l.dash?'dashed':'solid'} ${l.stroke}"></span>${esc(l.title)}</label>`).join(' ');
-document.querySelectorAll('[data-c]').forEach(b => b.onchange = () => { state.on[b.dataset.c] = b.checked?1:0; draw(); });
+document.querySelectorAll('[data-c]').forEach(b => b.onchange = () => { state.on[b.dataset.c] = b.checked?1:0; draw();
+
+const modeBtn = document.getElementById('mode');
+let mermaidMode = false;
+modeBtn.onclick = () => {
+  mermaidMode = !mermaidMode;
+  document.getElementById('merm').style.display = mermaidMode ? 'block' : 'none';
+  document.getElementById('svg').style.display = mermaidMode ? 'none' : 'block';
+  modeBtn.textContent = mermaidMode ? 'Mermaid视图' : '自定义视图';
+  modeBtn.classList.toggle('on', mermaidMode);
+};
+if(window.mermaid){
+  mermaid.initialize({startOnLoad:false, securityLevel:'loose'});
+  mermaid.run({nodes:[document.getElementById('mmd')]}).then(()=>{
+    mermaidMode = true;
+    document.getElementById('merm').style.display = 'block';
+    document.getElementById('svg').style.display = 'none';
+    modeBtn.textContent = 'Mermaid视图';
+  }).catch(()=>{});
+}
+ });
 document.getElementById('lbls').onchange = e => { state.showLbl = e.target.checked; draw(); };
 
 document.getElementById('lgbody').innerHTML =

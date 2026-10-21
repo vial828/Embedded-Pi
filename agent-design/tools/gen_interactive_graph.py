@@ -809,9 +809,11 @@ def render(config_path):
     """Returns (html, data). Handing data back avoids re-parsing the page."""
     cfg, _rules, data = build(config_path)
     page = Path(TEMPLATE).read_text(encoding="utf-8")
+    src_text = (Path(config_path).parent / cfg["mmd"]).read_text(encoding="utf-8")
     html = (page.replace("__DATA__", json.dumps(data, ensure_ascii=False))
                 .replace("__TITLE__", data["title"])
-                .replace("__SOURCE__", cfg["mmd"]))
+                .replace("__SOURCE__", cfg["mmd"])
+                .replace("__MMD_SOURCE__", src_text))
     return html, data
 
 
