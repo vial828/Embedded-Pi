@@ -1,10 +1,13 @@
-%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": false, "useMaxWidth": false}, "layoutOptions": {"elk.spacing.nodeNode": "10", "elk.layered.spacing.nodeNodeBetweenLayers": "22", "elk.spacing.edgeNode": "10", "elk.spacing.edgeEdge": "8", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.layered.compaction.postCompaction": "true", "elk.layered.compaction.postCompaction.constraints": "NODE_DISTANCE COMPONENT_SIZES", "elk.layered.mergeEdges": "true", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=26,left=10,bottom=12,right=10]"}, "themeVariables": {"fontSize": "13px"}}}%%
+%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": false, "useMaxWidth": false}, "layoutOptions": {"elk.spacing.nodeNode": "10", "elk.layered.spacing.nodeNodeBetweenLayers": "22", "elk.spacing.edgeNode": "10", "elk.spacing.edgeEdge": "8", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.layered.compaction.postCompaction": "true", "elk.layered.compaction.postCompaction.constraints": "NODE_DISTANCE COMPONENT_SIZES", "elk.layered.mergeEdges": "true", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=26,left=10,bottom=12,right=10]"}, "themeVariables": {"fontSize": "11px"}}}%%
 %% 方向写在下面的 flowchart 语句里，不写在 elk.direction：Mermaid 的 ELK 集成用图声明
 %% 的方向去设 elk.direction，在 layoutOptions 里写会被静默覆盖（试过一次，无变化）。
 %% 分散用后紧凑治，不用间距和宽高比治：间距是等比缩放，改多少比例还是那个形状。
 %%   elk.layered.compaction.postCompaction   布局完成后整体收紧，专治分层布局的空档
 %%   elk.layered.mergeEdges                  平行边合并，少占走边通道 -> 列更窄
 %% 方向保持 LR（流水线语义）。
+%% 字号是唯一的逐框收窄杠杆：框宽 = 标签文字宽 + 内边距，文字宽正比字号。
+%% 13 -> 11 让每列下限同比例下降，整图等比变窄，且不像 useMaxWidth 那样缩放渲染。
+%% 反过来，CSS 强行改 .node rect 的 width 会错位：文字位置与边端点按 Mermaid 自测尺寸算。
 %% 布局引擎用 ELK，不用默认 dagre。理由：dagre 把每个节点推到 max(前驱)+1，链一长整层横向散开，
 %% 而且层框只是成员外接框、无任何旋钮。ELK 给了 dagre 没有的三个：
 %%   elk.spacing.nodeNode                        同层节点间距（dagre 的 nodeSpacing 更粗）
