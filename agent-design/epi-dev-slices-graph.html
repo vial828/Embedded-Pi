@@ -50,9 +50,10 @@
   <span>类别</span><span id=filters></span>
   <label><input type=checkbox id=lbls checked> 边标签</label>
   <button id=reset>重置</button>
-  <button id=mode class=on>Mermaid视图</button><span id=hint>点节点聚焦 · 拖拽平移 · 滚轮缩放 · Esc 取消</span>
+  <button id=mode>切换到 Mermaid 视图</button><span id=hint>点节点聚焦 · 拖拽平移 · 滚轮缩放 · Esc 取消</span>
 </div>
 <div id=info class=panel></div>
+<div id=msg class="panel" style="left:12px;top:56px;padding:8px 10px;display:none;color:#92400E;background:#FFFBEB;border-color:#FCD34D"></div>
 <div id=legend class=panel>
   <h4>大图说明 <span id=lgtog>收起 −</span></h4>
   <div id=lgbody></div>
@@ -391,22 +392,34 @@ document.getElementById('filters').innerHTML = D.legend.map(l =>
 document.querySelectorAll('[data-c]').forEach(b => b.onchange = () => { state.on[b.dataset.c] = b.checked?1:0; draw();
 
 const modeBtn = document.getElementById('mode');
-let mermaidMode = false;
-modeBtn.onclick = () => {
-  mermaidMode = !mermaidMode;
+const msg = document.getElementById('msg');
+let mermaidMode = false, mermaidReady = false;
+function showMode(){
   document.getElementById('merm').style.display = mermaidMode ? 'block' : 'none';
   document.getElementById('svg').style.display = mermaidMode ? 'none' : 'block';
-  modeBtn.textContent = mermaidMode ? 'Mermaid视图' : '自定义视图';
+  modeBtn.textContent = mermaidMode ? '切换到 自定义视图' : '切换到 Mermaid 视图';
   modeBtn.classList.toggle('on', mermaidMode);
+}
+modeBtn.onclick = () => {
+  if(!mermaidReady){
+    msg.style.display='block';
+    msg.textContent='Mermaid 视图未加载成功（通常是离线或拦截了 cdn.jsdelivr.net）。当前显示自定义视图。';
+    return;
+  }
+  mermaidMode = !mermaidMode; showMode();
 };
 if(window.mermaid){
   mermaid.initialize({startOnLoad:false, securityLevel:'loose'});
   mermaid.run({nodes:[document.getElementById('mmd')]}).then(()=>{
-    mermaidMode = true;
-    document.getElementById('merm').style.display = 'block';
-    document.getElementById('svg').style.display = 'none';
-    modeBtn.textContent = 'Mermaid视图';
-  }).catch(()=>{});
+    mermaidReady = true;
+    mermaidMode = true; showMode();
+  }).catch((e)=>{
+    msg.style.display='block';
+    msg.textContent='Mermaid 渲染失败：' + (e && e.message ? e.message : 'unknown');
+  });
+}else{
+  msg.style.display='block';
+  msg.textContent='Mermaid 库未加载（可能被网络或策略阻止）。';
 }
  });
 document.getElementById('lbls').onchange = e => { state.showLbl = e.target.checked; draw(); };
