@@ -325,7 +325,7 @@ def order_layers(layers, chains, sweeps):
     return pos
 
 
-def lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y):
+def lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y, nx=None):
     """Route forward edges through per-gap lanes.
 
     Without lanes every long edge crosses a column gap on the same vertical, so
@@ -356,11 +356,12 @@ def lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y):
     for idx, e in enumerate(edges):
         la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
         if la < lb:
-            pts = [(x_of[la] + w_of.get(e["src"], col_w.get(la, 0)), out_y[idx])]
+            src_x = (nx[e["src"]] if nx else x_of[la]) + w_of.get(e["src"], col_w.get(la, 0))
+            pts = [(src_x, out_y[idx])]
             for g in range(la, lb):
                 y = in_y[idx] if g == lb - 1 else y_of.get(("d", (idx, g + 1)), in_y[idx])
                 pts.append((lane_x[(g, idx)], y))
-            pts.append((x_of[lb], in_y[idx]))
+            pts.append(((nx[e["dst"]] if nx else x_of[lb]), in_y[idx]))
             geo[idx] = pts
     return geo
 
@@ -649,6 +650,25 @@ def build(config_path):
         x_of[l] = cursor
         cursor += col_w[l] + h_gap
 
+    # 层框偏移：挪一层 = 挪它的全部节点（边按节点位置连，所以边自动跟着走）。
+    # 这是给"把这一层挪到那儿"一个正当出口：Mermaid 里没有这个接口
+    boxes_cfg = layout.get("layer_boxes", {})
+
+    def layer_off(nid):
+        cfg = boxes_cfg.get(doc.nodes[nid].subgraph if nid in doc.nodes else "", {})
+        return float(cfg.get("dx", 0) or 0), float(cfg.get("dy", 0) or 0)
+
+    nx = {n: x_of[level_of.get(n, 0)] + layer_off(n)[0] for n in ids}
+    ny = {n: y_of[("n", n)] + layer_off(n)[1] for n in ids}
+
+    # 偏移是给人自由度的，这条是它的边界：框不许互相压住。
+    # 越界不报错而是进统计并由测试拦下——布局工具里"生成成功但图不可读"是最坏的失败
+    clash = [f"{a}×{b}" for i, a in enumerate(ids) for b in ids[i + 1:]
+             if nx[a] < nx[b] + w_of[b] and nx[b] < nx[a] + w_of[a]
+             and ny[a] - h / 2 < ny[b] + h / 2 and ny[b] - h / 2 < ny[a] + h / 2]
+    if clash:
+        print(f"  警告：{len(clash)} 对框重叠（检查 layer_boxes 的 dx/dy）：" + ", ".join(clash[:6]))
+
     # ports: spread edge attach points along the node's left/right edge
     out_slots, in_slots = collections.defaultdict(list), collections.defaultdict(list)
     for idx, e in enumerate(edges):
@@ -656,10 +676,10 @@ def build(config_path):
         in_slots[e["dst"]].append(idx)
 
     def slot_y(node_id, idx, slots, back):
-        order = sorted(slots, key=lambda i: y_of.get(("n", edges[i]["src" if back else "dst"]), 0))
+        order = sorted(slots, key=lambda i: ny[edges[i]["src" if back else "dst"]])
         k = order.index(idx)
         spread = h * 0.72
-        return y_of[("n", node_id)] + (k + 0.5) / len(order) * spread - spread / 2
+        return ny[node_id] + (k + 0.5) / len(order) * spread - spread / 2
 
     back_lanes = {}
     for idx, e in enumerate(edges):
@@ -668,7 +688,7 @@ def build(config_path):
 
     out_y = {idx: slot_y(e["src"], idx, out_slots[e["src"]], False) for idx, e in enumerate(edges)}
     in_y = {idx: slot_y(e["dst"], idx, in_slots[e["dst"]], True) for idx, e in enumerate(edges)}
-    geo = lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y)
+    geo = lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y, nx)
 
     # 反向边与同列边：端点必须落在节点框边上，不能悬在顶边外面
     for idx, e in enumerate(edges):
@@ -689,7 +709,7 @@ def build(config_path):
 
     segs = [(owner, _boxed(_seg(a, b))) for owner, pts in geo.items()
             for a, b in zip(pts, pts[1:])]
-    rects = [(x_of[level_of.get(n, 0)] + w_of[n] / 2, y_of[("n", n)] - h / 2, w_of[n], h) for n in ids]
+    rects = [(nx[n] + w_of[n] / 2, ny[n] - h / 2, w_of[n], h) for n in ids]
 
     # 分组框：成员按各自的列散布，框就按成员实际位置包一圈。以前交互图不画分组，
     # 于是它比 Mermaid 版难读，谁都不看它 —— 布局做得再好也没人看得见
@@ -699,16 +719,19 @@ def build(config_path):
         sub = doc.nodes.get(n).subgraph if n in doc.nodes else ""
         if not sub or sub in doc.legend_ids():
             continue
-        left, top = x_of[level_of.get(n, 0)], y_of[("n", n)] - h / 2
+        left, top = nx[n], ny[n] - h / 2
         box = boxes.setdefault(sub, [left, top, left + w_of[n], top + h, []])
         box[0], box[1] = min(box[0], left), min(box[1], top)
         box[2], box[3] = max(box[2], left + w_of[n]), max(box[3], top + h)
         box[4].append(n)
-    groups = [{"id": k, "title": doc.subgraphs.get(k, k),
-               "x": round(b[0] - pad_g, 1), "y": round(b[1] - pad_g - 14, 1),
-               "w": round(b[2] - b[0] + pad_g * 2, 1), "h": round(b[3] - b[1] + pad_g * 2 + 14, 1),
-               "members": sorted(b[4])}
-              for k, b in sorted(boxes.items())]
+    groups = []
+    for k, b in sorted(boxes.items()):
+        bcfg = boxes_cfg.get(k, {})        # 别叫 cfg：会遮蔽 build() 自己的配置并返回错的东西
+        gw = max(b[2] - b[0] + pad_g * 2, float(bcfg.get("w") or 0))
+        gh = max(b[3] - b[1] + pad_g * 2 + 14, float(bcfg.get("h") or 0))
+        groups.append({"id": k, "title": doc.subgraphs.get(k, k),
+                       "x": round(b[0] - pad_g, 1), "y": round(b[1] - pad_g - 14, 1),
+                       "w": round(gw, 1), "h": round(gh, 1), "members": sorted(b[4])})
     labels = []
     for idx, e in enumerate(edges):
         labels.append({"for": f"{e['src']}->{e['dst']}", "idx": idx, "pts": geo[idx],
@@ -726,7 +749,7 @@ def build(config_path):
     for n in ids:
         meta = dict(info.get(n, {}))
         desc = meta.pop(desc_col, "")
-        nodes.append({"id": n, "x": x_of[level_of.get(n, 0)], "y": y_of[("n", n)] - h / 2,
+        nodes.append({"id": n, "x": nx[n], "y": ny[n] - h / 2,
                       "level": level_of.get(n, 0), "w": w_of[n], "h": h,
                       "label": doc.nodes[n].label if n in doc.nodes else n,
                       "name": meta.pop("name", "") or (doc.nodes[n].label if n in doc.nodes else ""),
@@ -771,7 +794,8 @@ def build(config_path):
                   "labels_off_own_edge": sum(1 for l in labels if not l["on_own"]),
                   "labels_crossing_others": sum(1 for l in labels if l["cross_others"]),
                   # 调紧凑度要有数可看，不然只能凭眼睛判断"这次是不是变小了"
-                  "avg_box_w": round(sum(w_of.values()) / len(w_of), 1) if w_of else 0},
+                  "avg_box_w": round(sum(w_of.values()) / len(w_of), 1) if w_of else 0,
+                  "box_overlaps": len(clash)},
     }
 
 

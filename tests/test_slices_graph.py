@@ -162,6 +162,12 @@ def test_edge_endpoints_touch_their_nodes(built):
     assert not loose, f"{len(loose)} 条边端点悬空，例如 {loose[:4]}"
 
 
+def test_layer_offsets_do_not_stack_boxes(built):
+    """偏移给人自由度，这条是它的边界。压住的图仍然'生成成功'，所以只能由数来拦。"""
+    bad = built["stats"]["box_overlaps"]
+    assert not bad, f"{bad} 对框重叠，检查 graph-rules.json 里 layer_boxes 的 dx/dy"
+
+
 def test_a_box_is_sized_to_its_own_label(built):
     """Uniform box width hands every node the longest label's whitespace.
 
