@@ -2,6 +2,17 @@
 
 > 目标：给出 EPI 本体开发的完整切片视图，支持整体评估与逐切片风险分析。
 
+<style>
+/* 大图横向太长的显示层兜底：缩放整幅图，文字与边一起缩，不会像改 .node rect 那样错位。
+   三个目标都要写：预览扩展可能渲染成内联 svg，也可能渲染成 <img>。
+   GitHub 会剥掉 <style>，所以这条只在本地预览生效。 */
+.mermaid, .mermaid svg, pre.mermaid img, svg[id^="mermaid-"] {
+  max-width: 100% !important;
+  width: 1500px;
+  height: auto;
+}
+</style>
+
 ## 1. 总体开发大图（EPI 本体，不是 FW 业务架构）
 
 ```mermaid
