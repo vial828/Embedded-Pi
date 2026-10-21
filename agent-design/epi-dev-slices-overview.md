@@ -5,8 +5,10 @@
 ## 1. 总体开发大图（EPI 本体，不是 FW 业务架构）
 
 ```mermaid
-%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": false, "useMaxWidth": false}, "layoutOptions": {"elk.direction": "DOWN", "elk.spacing.nodeNode": "18", "elk.layered.spacing.nodeNodeBetweenLayers": "22", "elk.spacing.edgeNode": "10", "elk.spacing.edgeEdge": "8", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=26,left=10,bottom=12,right=10]"}, "themeVariables": {"fontSize": "13px"}}}%%
-%% 方向用 DOWN 不用 RIGHT：LR 下总宽 = 秩数 x 层间距，本图最长链 10+ 个秩，
+%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": false, "useMaxWidth": false}, "layoutOptions": {"elk.spacing.nodeNode": "18", "elk.layered.spacing.nodeNodeBetweenLayers": "22", "elk.spacing.edgeNode": "10", "elk.spacing.edgeEdge": "8", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=26,left=10,bottom=12,right=10]"}, "themeVariables": {"fontSize": "13px"}}}%%
+%% 方向写在下面的 flowchart 语句里，不写在 elk.direction：Mermaid 的 ELK 集成用图声明
+%% 的方向去设 elk.direction，在 layoutOptions 里写会被静默覆盖（试过一次，无变化）。
+%% 方向用 TB 不用 LR：LR 下总宽 = 秩数 x 层间距，本图最长链 10+ 个秩，
 %% 实测 2727x907（3:1）且底部三成空白。改 TB 后宽 = 同秩节点数（最多约 8 个），高换宽。
 %% 布局引擎用 ELK，不用默认 dagre。理由：dagre 把每个节点推到 max(前驱)+1，链一长整层横向散开，
 %% 而且层框只是成员外接框、无任何旋钮。ELK 给了 dagre 没有的三个：
@@ -18,7 +20,7 @@
 %%   elk.edgeRouting                                 正交走边（横平竖直）：这是选定的风格，
 %%                                                   显式写死，不靠 ELK 默认值恰好如此
 %% 若渲染器版本不支持 ELK 会直接报错，此时删掉 defaultRenderer 与 layoutOptions 即回到 dagre。
-flowchart LR
+flowchart TB
 
   %% ── 图例（不参与数据流，配色见文件末尾样式块）──
   %% @legend Legend   声明式排除：转换工具据此跳过图例子图
