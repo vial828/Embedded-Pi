@@ -8,7 +8,7 @@
    GitHub 会剥掉 <style>，所以这条只在本地预览生效。 */
 .mermaid, .mermaid svg, pre.mermaid img, svg[id^="mermaid-"] {
   max-width: 100% !important;
-  width: 1500px;
+  width: 1200px;
   height: auto;
 }
 </style>
@@ -16,7 +16,7 @@
 ## 1. 总体开发大图（EPI 本体，不是 FW 业务架构）
 
 ```mermaid
-%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": false, "useMaxWidth": false}, "layoutOptions": {"elk.spacing.nodeNode": "10", "elk.layered.spacing.nodeNodeBetweenLayers": "22", "elk.spacing.edgeNode": "10", "elk.spacing.edgeEdge": "8", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.layered.compaction.postCompaction": "true", "elk.layered.compaction.postCompaction.constraints": "NODE_DISTANCE COMPONENT_SIZES", "elk.layered.mergeEdges": "true", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=18,left=8,bottom=10,right=8]"}, "themeVariables": {"fontSize": "12px"}}}%%
+%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": false, "useMaxWidth": false}, "layoutOptions": {"elk.spacing.nodeNode": "8", "elk.layered.spacing.nodeNodeBetweenLayers": "14", "elk.spacing.edgeNode": "7", "elk.spacing.edgeEdge": "6", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.layered.compaction.postCompaction": "true", "elk.layered.compaction.postCompaction.constraints": "NODE_DISTANCE COMPONENT_SIZES", "elk.layered.mergeEdges": "true", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=14,left=6,bottom=8,right=6]"}, "themeVariables": {"fontSize": "12px"}}}%%
 %% 方向写在下面的 flowchart 语句里，不写在 elk.direction：Mermaid 的 ELK 集成用图声明
 %% 的方向去设 elk.direction，在 layoutOptions 里写会被静默覆盖（试过一次，无变化）。
 %% 分散用后紧凑治，不用间距和宽高比治：间距是等比缩放，改多少比例还是那个形状。
