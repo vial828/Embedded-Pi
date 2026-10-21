@@ -5,7 +5,7 @@
 ## 1. 总体开发大图（EPI 本体，不是 FW 业务架构）
 
 ```mermaid
-%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": false, "useMaxWidth": false}, "layoutOptions": {"elk.direction": "RIGHT", "elk.spacing.nodeNode": "18", "elk.layered.spacing.nodeNodeBetweenLayers": "46", "elk.spacing.edgeNode": "14", "elk.spacing.edgeEdge": "10", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=34,left=18,bottom=16,right=18]"}, "themeVariables": {"fontSize": "13px"}}}%%
+%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": false, "useMaxWidth": false}, "layoutOptions": {"elk.direction": "RIGHT", "elk.spacing.nodeNode": "18", "elk.layered.spacing.nodeNodeBetweenLayers": "22", "elk.spacing.edgeNode": "10", "elk.spacing.edgeEdge": "8", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=26,left=10,bottom=12,right=10]"}, "themeVariables": {"fontSize": "13px"}}}%%
 %% 布局引擎用 ELK，不用默认 dagre。理由：dagre 把每个节点推到 max(前驱)+1，链一长整层横向散开，
 %% 而且层框只是成员外接框、无任何旋钮。ELK 给了 dagre 没有的三个：
 %%   elk.spacing.nodeNode                        同层节点间距（dagre 的 nodeSpacing 更粗）
