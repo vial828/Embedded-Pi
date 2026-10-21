@@ -98,13 +98,6 @@ flowchart LR
     S19[S19 State]
     S20[S20 LLM/Tools]
     S21[S21 Executor]
-    %% 标签停靠列：统一把瓶颈边的标签挂在源侧，并保持纵向对齐
-    LX_ART[ ]
-    LX_REQ[ ]
-    LX_REG[ ]
-    LX_CAND[ ]
-    LX_TASK[ ]
-    LX_WORK[ ]
   end
 
   subgraph Verify[验证层]
@@ -146,17 +139,13 @@ flowchart LR
   S12 -.-> | 片段| S13
   S13 -.-> | 约束/决策| S14
   S08 -.-> | rules| S15
-  S09 -.-> | req_index| LX_REQ
-  LX_REQ -.-> S15
-  S10 -.-> | reg_index| LX_REG
-  LX_REG -.-> S15
-  S11 -.-> | artifact_graph| LX_ART
-  LX_ART -.-> S15
+  S09 -.-> | req_index| S15
+  S10 -.-> | reg_index| S15
+  S11 -.-> | artifact_graph| S15
   S14 -.-> | candidate| S15
   S13 --> | long base| S16
   S15 -.-> | 晋升后的规则| S16
-  S12 --> | working| LX_WORK
-  LX_WORK --> S17
+  S12 --> | working| S17
   S16 --> | pack| S17
 
 
@@ -185,10 +174,8 @@ flowchart LR
   %% 运行时控制（控制流：蓝实线，箭头写 -.->）
   S17 -.-> | 上一轮上下文回写| S12
   S15 -.-> | ？晋升写入| S13
-  S20 -.-> | 候选提名| LX_CAND
-  LX_CAND -.-> S14
-  S19 -.-> | 当前task查询| LX_TASK
-  LX_TASK -.-> S16
+  S20 -.-> | 候选提名| S14
+  S19 -.-> | 当前task查询| S16
   S19 --> | 当前phase/task| S17
   S17 --> | 上下文输入| S18
   S26 -.-> | 重试反馈| S19
@@ -214,15 +201,6 @@ flowchart LR
   IN_TOOL_V -->| 仿真环境| S24
   IN_TOOL_D -->| CI环境| S31
 
-
-  %% 标签停靠点可见性关闭（仅作路由/标签定位，不承载业务语义）
-  style LX_ART fill:transparent,stroke:transparent,color:transparent
-  style LX_REQ fill:transparent,stroke:transparent,color:transparent
-  style LX_REG fill:transparent,stroke:transparent,color:transparent
-  style LX_CAND fill:transparent,stroke:transparent,color:transparent
-  style LX_TASK fill:transparent,stroke:transparent,color:transparent
-  style LX_WORK fill:transparent,stroke:transparent,color:transparent
-
   %% 样式：颜色由 tools/apply_edge_style.py 依 graph-rules.json 生成，勿手改
   %% 类别只由箭头写法决定（--> 数据流，-.-> 控制流，-.->且标签含 ？ 待定），配色是输出不是输入
   linkStyle default stroke:#F97316,stroke-width:2.2px
@@ -247,14 +225,14 @@ flowchart LR
   linkStyle 18 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 19 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 20 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 21 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 21 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 22 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 23 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 23 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 24 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 25 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 26 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 27 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 28 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 26 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 27 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 28 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 29 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 30 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 31 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
@@ -272,25 +250,25 @@ flowchart LR
   linkStyle 43 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 44 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 45 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 46 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 46 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
   linkStyle 47 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 48 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 49 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 50 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
+  linkStyle 49 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 50 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 51 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 52 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 52 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 53 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 54 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 55 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 56 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 55 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 56 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 57 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 58 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 59 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 60 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 61 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 62 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 63 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 64 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 58 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 59 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 60 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 61 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 62 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 63 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 64 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 65 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 66 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 67 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
@@ -298,12 +276,6 @@ flowchart LR
   linkStyle 69 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 70 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 71 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 72 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 73 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 74 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 75 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 76 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 77 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
 ```
 
 ### 1.1 边的图例
