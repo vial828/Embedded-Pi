@@ -1,10 +1,9 @@
-%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": true, "useMaxWidth": false, "wrap": false}, "layoutOptions": {"elk.spacing.nodeNode": "8", "elk.layered.spacing.nodeNodeBetweenLayers": "14", "elk.spacing.edgeNode": "7", "elk.spacing.edgeEdge": "4", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.layered.nodePlacement.favorStraightEdges": "true", "elk.layered.unnecessaryBendpoints": "true", "elk.layered.considerModelOrder": "NODES_AND_EDGES", "elk.layered.compaction.postCompaction": "true", "elk.layered.compaction.postCompaction.constraints": "NODE_DISTANCE COMPONENT_SIZES", "elk.layered.mergeEdges": "true", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.edgeLabels.placement": "TAIL", "elk.edgeLabels.inline": "true", "elk.padding": "[top=14,left=6,bottom=8,right=6]"}, "themeVariables": {"fontSize": "48px"}, "themeCSS": ".edgeLabel, .edgeLabel p, .edgeLabel span { white-space: nowrap !important; word-break: keep-all !important; } .edgeLabel { background: transparent !important; padding: 0 !important; } .edgeLabel span { font-size: 38px !important; line-height: 1.0 !important; }"}}%%
+%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": true, "useMaxWidth": false, "wrap": false}, "layoutOptions": {"elk.spacing.nodeNode": "8", "elk.layered.spacing.nodeNodeBetweenLayers": "14", "elk.spacing.edgeNode": "7", "elk.spacing.edgeEdge": "4", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.layered.nodePlacement.favorStraightEdges": "true", "elk.layered.unnecessaryBendpoints": "true", "elk.layered.considerModelOrder": "NODES_AND_EDGES", "elk.layered.compaction.postCompaction": "true", "elk.layered.compaction.postCompaction.constraints": "NODE_DISTANCE COMPONENT_SIZES", "elk.layered.mergeEdges": "true", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=14,left=6,bottom=8,right=6]"}, "themeVariables": {"fontSize": "48px"}, "themeCSS": ".edgeLabel, .edgeLabel p, .edgeLabel span { white-space: nowrap !important; word-break: keep-all !important; } .edgeLabel { background: transparent !important; padding: 0 !important; } .edgeLabel span { font-size: 38px !important; line-height: 1.0 !important; }"}}%%
 %% 方向写在下面的 flowchart 语句里，不写在 elk.direction：Mermaid 的 ELK 集成用图声明
 %% 的方向去设 elk.direction，在 layoutOptions 里写会被静默覆盖（试过一次，无变化）。
 %% 分散用后紧凑治，不用间距和宽高比治：间距是等比缩放，改多少比例还是那个形状。
 %%   elk.layered.compaction.postCompaction   布局完成后整体收紧，专治分层布局的空档
 %%   elk.layered.mergeEdges=true             收束并行边，减少不必要交叉；结合直边偏好减少绕远
-%%   elk.edgeLabels.placement=TAIL           标签靠近源侧，减少中段保留空间导致的绕远
 %% 方向保持 LR（流水线语义）。
 %% 字号是唯一的逐框收窄杠杆：框宽 = 标签文字宽 + 内边距，文字宽正比字号。
 %% 字号当前 12px；再小会影响可读性，再窄就应拆图或减秩。
@@ -106,20 +105,19 @@ flowchart LR
   end
 
   %% 数据流（橙实线，箭头 -->）：这条边存在的理由是交付产物
-  S13 --> | long base| S16
-  S12 --> | working| S17
-  S16 --> | pack| S17
   S01 -.-> | 调用| S02
   S02 -.-> | config.yaml| S03
   S02 -.-> | 模板骨架| S04
   S04 -.-> | system-design.md| S05
   S05 -.-> | sections| S06
   S06 -.-> | schema| S07
+
   S02 -.-> | Docs布局| S08
   S02 -.-> | Docs布局| S09
   S02 -.-> | Docs布局| S10
   S09 -.-> | req节点| S11
   S10 -.-> | reg节点| S11
+
   S12 -.-> | 片段| S13
   S13 -.-> | 约束/决策| S14
   S08 -.-> | rules| S15
@@ -127,7 +125,12 @@ flowchart LR
   S10 -.-> | reg_index| S15
   S11 -.-> | artifact_graph| S15
   S14 -.-> | candidate| S15
+  S13 --> | long base| S16
   S15 -.-> | 晋升后的规则| S16
+  S12 --> | working| S17
+  S16 --> | pack| S17
+
+
   S03 -.-> | 配置| S18
   S18 -.-> | 任务序列| S19
   S19 -.-> | 调用 LLM| S20
@@ -139,6 +142,7 @@ flowchart LR
   S23 -.-> | 静态告警| S25
   S24 -.-> | 仿真结果| S25
   S25 -.-> | 分类标签| S26
+
   S19 -.-> | 追踪规格| S27
   S13 -.-> | 决策| S28
   S22 -.-> | 编译结果| S29
@@ -148,21 +152,23 @@ flowchart LR
   S28 -.-> | 证据| S30
   S29 -.-> | 证据| S30
   S30 -.-> | 判定门控| S31
+
   %% 运行时控制（控制流：蓝实线，箭头写 -.->）
-  S19 --> | 当前phase/task| S17
-  S17 --> | 上下文输入| S18
-  S17 --> | context pack| S20
   S17 -.-> | 上一轮上下文回写| S12
   S15 -.-> | ？晋升写入| S13
   S20 -.-> | 候选提名| S14
   S19 -.-> | 当前task查询| S16
+  S19 --> | 当前phase/task| S17
+  S17 --> | 上下文输入| S18
   S26 -.-> | 重试反馈| S19
+  S17 --> | context pack| S20
   S20 -.-> | 工具调用计划| S21
   S21 -.-> | 执行记录| S27
   S22 -.-> | 编译记录| S27
   S23 -.-> | 静态记录| S27
   S24 -.-> | 仿真记录| S27
   S19 -.-> | 状态转移事件| S28
+
   IN_TOOL -->| env| S03
   IN_PRD -->| 约束| S04
   IN_BSP -->| 边界| S04
@@ -171,8 +177,8 @@ flowchart LR
   IN_STD -->| source| S08
   IN_PRD -->| source| S09
   IN_HW -->| source| S10
-  IN_HW -->| reg| S11
   IN_PRD_K -->| req| S11
+  IN_HW -->| reg| S11
   IN_PRD_A -->| task语义| S18
   IN_TOOL_V -->| 仿真环境| S24
   IN_TOOL_D -->| CI环境| S31
@@ -183,9 +189,9 @@ flowchart LR
   linkStyle 0 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 1 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 2 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
-  linkStyle 3 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 4 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 5 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 3 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 4 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 5 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 6 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 7 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 8 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
@@ -201,10 +207,10 @@ flowchart LR
   linkStyle 18 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 19 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 20 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 21 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 21 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 22 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 23 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 24 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 23 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 24 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 25 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 26 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 27 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
@@ -225,14 +231,14 @@ flowchart LR
   linkStyle 42 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 43 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 44 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 45 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 46 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 47 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 45 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 46 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
+  linkStyle 47 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 48 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 49 stroke:#A855F7,stroke-width:3.2px,stroke-dasharray:6 3
-  linkStyle 50 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 49 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 50 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 51 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
-  linkStyle 52 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
+  linkStyle 52 stroke:#F97316,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 53 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 54 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
   linkStyle 55 stroke:#2563EB,stroke-width:2.2px,stroke-dasharray:0
