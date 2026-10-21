@@ -16,7 +16,7 @@
 ## 1. 总体开发大图（EPI 本体，不是 FW 业务架构）
 
 ```mermaid
-%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": false, "useMaxWidth": false}, "layoutOptions": {"elk.spacing.nodeNode": "8", "elk.layered.spacing.nodeNodeBetweenLayers": "14", "elk.spacing.edgeNode": "7", "elk.spacing.edgeEdge": "6", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.layered.compaction.postCompaction": "true", "elk.layered.compaction.postCompaction.constraints": "NODE_DISTANCE COMPONENT_SIZES", "elk.layered.mergeEdges": "true", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=14,left=6,bottom=8,right=6]"}, "themeVariables": {"fontSize": "48px"}}}%%
+%%{init: {"flowchart": {"defaultRenderer": "elk", "curve": "linear", "htmlLabels": true, "useMaxWidth": false, "wrap": false}, "layoutOptions": {"elk.spacing.nodeNode": "8", "elk.layered.spacing.nodeNodeBetweenLayers": "14", "elk.spacing.edgeNode": "7", "elk.spacing.edgeEdge": "6", "elk.layered.nodePlacement.strategy": "BRUTE_LIST", "elk.layered.compaction.postCompaction": "true", "elk.layered.compaction.postCompaction.constraints": "NODE_DISTANCE COMPONENT_SIZES", "elk.layered.mergeEdges": "true", "elk.edgeRouting": "ORTHOGONAL", "elk.compactParts": "true", "elk.padding": "[top=14,left=6,bottom=8,right=6]"}, "themeVariables": {"fontSize": "48px"}, "themeCSS": ".edgeLabel, .edgeLabel p, .edgeLabel span { white-space: nowrap !important; word-break: keep-all !important; } .edgeLabel span { font-size: 32px !important; }"}}%%
 %% 方向写在下面的 flowchart 语句里，不写在 elk.direction：Mermaid 的 ELK 集成用图声明
 %% 的方向去设 elk.direction，在 layoutOptions 里写会被静默覆盖（试过一次，无变化）。
 %% 分散用后紧凑治，不用间距和宽高比治：间距是等比缩放，改多少比例还是那个形状。
@@ -26,6 +26,7 @@
 %% 字号是唯一的逐框收窄杠杆：框宽 = 标签文字宽 + 内边距，文字宽正比字号。
 %% 字号当前 12px；再小会影响可读性，再窄就应拆图或减秩。
 %% 反过来，CSS 强行改 .node rect 的 width 会错位：文字位置与边端点按 Mermaid 自测尺寸算。
+%% 边标签强制不换行；极端拥挤时只缩边标签字号（节点保持 48px）。
 %% 布局引擎用 ELK，不用默认 dagre。理由：dagre 把每个节点推到 max(前驱)+1，链一长整层横向散开，
 %% 而且层框只是成员外接框、无任何旋钮。ELK 给了 dagre 没有的三个：
 %%   elk.spacing.nodeNode                        同层节点间距（dagre 的 nodeSpacing 更粗）
