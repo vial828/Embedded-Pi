@@ -431,13 +431,19 @@ def place_labels_on_own_edge(labels, segs, rects):
     placed = []
 
     def slots(lab):
-        """Candidate boxes, centre-out along the edge. Wider than it looks necessary:
-        with 69 labels the middle of a long edge is usually already taken."""
+        """Candidate boxes, source-first.
+
+        Keep labels near the source side first; this shortens the first outgoing run
+        and gives a more aligned label column in dense bundles.
+        """
         out = []
-        for t in (0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65, 0.3, 0.7, 0.25, 0.75, 0.2, 0.8):
+        ts = (0.18, 0.22, 0.14, 0.28, 0.10, 0.34, 0.42, 0.5, 0.6, 0.72)
+        if lab.get("back"):
+            ts = tuple(1 - t for t in ts)
+        for t in ts:
             x, y = _poly_at(lab["pts"], t)
-            for dx in (0, 16, -16, 32, -32, 48, -48, 64, -64, 80, -80):
-                for dy in (0, -7, 7, -14, 14, -22, 22, -30, 30):
+            for dx in (0, 12, -12, 24, -24, 36, -36, 48, -48, 60, -60):
+                for dy in (0, -7, 7, -14, 14, -21, 21, -28, 28):
                     out.append((x + dx, y + dy, t))
         return out
 
@@ -481,7 +487,9 @@ def place_labels_on_own_edge(labels, segs, rects):
             for q in placed:
                 if abs(cx - q["lx"]) < hw + q["w"] / 2 + 4 and abs(cy - q["ly"]) < LABEL_H:
                     cost += 5000
-            cost += abs(t - 0.5) * 6
+            if "ax" in lab:
+                cost += abs(cx - lab["ax"]) * 0.35
+            cost += abs(t - 0.18) * 6 if not lab.get("back") else abs(t - 0.82) * 6
             scored.append((cost, cx, cy, hits_other, on_own))
         scored.sort(key=lambda r: (r[0], r[1], r[2]))
         cost, cx, cy, hits_other, on_own = scored[0]
@@ -493,20 +501,42 @@ def place_labels_on_own_edge(labels, segs, rects):
 
 
 def label_geometry(labels):
-    """Push labels apart so no two overlap. Deterministic, and unit-testable."""
+    """Push labels apart and snap them to an alignment grid."""
     placed = []
-    for lab in sorted(labels, key=lambda l: (round(l["lx"] / 40), l["ly"])):
-        y = lab["ly"]
-        for _ in range(200):
+    gx, gy = 12.0, 8.0
+    for lab in sorted(labels, key=lambda l: (round(l.get("ax", l["lx"]) / 24), l["ly"])):
+        x = round(lab["lx"] / gx) * gx
+        y = round(lab["ly"] / gy) * gy
+        for _ in range(300):
             hit = next((p for p in placed
-                        if abs(p["lx"] - lab["lx"]) < (p["w"] + lab["w"]) / 2 + 6
-                        and abs(y - p["ly"]) < LABEL_H), None)
+                        if abs(p["lx"] - x) < (p["w"] + lab["w"]) / 2 + 6
+                        and abs(p["ly"] - y) < LABEL_H), None)
             if hit is None:
                 break
-            y = hit["ly"] + LABEL_H
-        lab["ly"] = y
+            y = round((hit["ly"] + LABEL_H) / gy) * gy
+            if y - lab["ly"] > LABEL_H * 4:
+                y = round(lab["ly"] / gy) * gy
+                x += gx
+        lab["lx"], lab["ly"] = x, y
         placed.append(lab)
-    return labels
+
+    # Final hard guarantee: no overlap may survive. If any pair still overlaps,
+    # move the later one down (and right if needed) until clear.
+    labs = sorted(placed, key=lambda l: (l["lx"], l["ly"], l.get("for", "")))
+    for i in range(len(labs)):
+        a = labs[i]
+        for j in range(i + 1, len(labs)):
+            b = labs[j]
+            guard = 0
+            while (abs(a["lx"] - b["lx"]) < (a["w"] + b["w"]) / 2 + 2
+                   and abs(a["ly"] - b["ly"]) < LABEL_H - 2
+                   and guard < 200):
+                b["ly"] = round((b["ly"] + LABEL_H) / gy) * gy
+                if b["ly"] - a["ly"] > LABEL_H * 5:
+                    b["lx"] += gx
+                    b["ly"] = round((a["ly"] + LABEL_H) / gy) * gy
+                guard += 1
+    return placed
 
 
 def overlaps(labels, gap=2.0):
@@ -734,11 +764,14 @@ def build(config_path):
                        "w": round(gw, 1), "h": round(gh, 1), "members": sorted(b[4])})
     labels = []
     for idx, e in enumerate(edges):
+        la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
+        src_x = x_of.get(la, 0) + w_of.get(e["src"], w)
         labels.append({"for": f"{e['src']}->{e['dst']}", "idx": idx, "pts": geo[idx],
                        "w": max(24.0, len(e["label"]) * CHAR_W),
-                       "ax": _poly_at(geo[idx], 0.5)[0], "ay": _poly_at(geo[idx], 0.5)[1],
+                       "ax": src_x + 14, "back": la >= lb,
                        "lx": 0.0, "ly": 0.0})
     labels = place_labels_on_own_edge(labels, segs, rects)
+    labels = label_geometry(labels)
     label_of = {lab["for"]: lab for lab in labels}
 
     spec = rules.get("node_info") or {}
