@@ -178,16 +178,11 @@ document.getElementById('lgtog').onclick = () => {
 };
 
 const el = (t, a) => { const e = document.createElementNS(NS, t); for(const k in a) e.setAttribute(k, a[k]); return e; };
+// 横平竖直：只发折线，不做贝塞尔平滑。以前非水平段被平滑成 S 曲线，
+// 正交网格里穿斜线就是"乱"的直接来源。
 function pathOf(pts){
-  if(pts.length < 3){
-    const [p, q] = pts, c = (p[0]+q[0])/2;
-    return `M${p[0]},${p[1]} C${c},${p[1]} ${c},${q[1]} ${q[0]},${q[1]}`;
-  }
   let d = `M${pts[0][0]},${pts[0][1]}`;
-  for(let i = 1; i < pts.length; i++){
-    const p = pts[i-1], q = pts[i], mx = (p[0]+q[0])/2;
-    d += Math.abs(q[1]-p[1]) < 1 ? ` L${q[0]},${q[1]}` : ` C${mx},${p[1]} ${mx},${q[1]} ${q[0]},${q[1]}`;
-  }
+  for(const p of pts.slice(1)) d += ` L${p[0]},${p[1]}`;
   return d;
 }
 

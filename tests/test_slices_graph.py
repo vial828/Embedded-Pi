@@ -138,6 +138,23 @@ def test_labels_do_not_overlap(built):
     assert built["stats"]["label_overlaps"] == 0
 
 
+def test_every_edge_segment_is_axis_aligned(built):
+    """横平竖直是选定的走线风格，不是"看起来差不多"。
+
+    曾经几何是折线但画出来是贝塞尔曲线：数据正交、渲染穿斜线，看的人只看到乱。
+    所以这条断言落在数据上，渲染器再引入平滑也过不了测试。
+    """
+    diag = [(e["s"], e["t"], round(abs(b[0] - a[0]), 1), round(abs(b[1] - a[1]), 1))
+            for e in built["edges"] for a, b in zip(e["pts"], e["pts"][1:])
+            if abs(b[0] - a[0]) > 0.5 and abs(b[1] - a[1]) > 0.5]
+    assert not diag, f"{len(diag)} 段是斜线，例如 {diag[:4]}"
+
+
+def test_the_renderer_draws_polylines_not_curves(page):
+    """数据正交还不够：模板里若留着贝塞尔平滑，屏幕上依然是曲线。"""
+    assert "C$" not in page, "页面里出现三次贝塞尔指令，走线又变回曲线了"
+
+
 def test_every_edge_has_geometry_and_label_slot(built):
     for e in built["edges"]:
         assert e["pts"], f"{e['s']}->{e['t']} 没有几何"

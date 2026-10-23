@@ -325,6 +325,32 @@ def order_layers(layers, chains, sweeps):
     return pos
 
 
+def orthogonalize(pts):
+    """Turn any polyline into horizontal/vertical segments only.
+
+    Routing produces a few diagonal shortcuts (mostly two-node and back edges). Drawing
+    those as curves was the visible '乱七八糟': a diagonal S-curve weaving through a grid
+    of orthogonal lines reads as chaos, and the test below now makes that impossible to
+    reintroduce silently.
+    """
+    out = [tuple(pts[0])]
+    for a, b in zip(pts, pts[1:]):
+        a, b = tuple(a), tuple(b)
+        dx, dy = abs(b[0] - a[0]), abs(b[1] - a[1])
+        if dx < 0.5 or dy < 0.5:
+            out.append(b)
+            continue
+        mid_x = (a[0] + b[0]) / 2          # LR flow: step across in the middle
+        out.append((mid_x, a[1]))
+        out.append((mid_x, b[1]))
+        out.append(b)
+    dedup = [out[0]]
+    for p in out[1:]:
+        if abs(p[0] - dedup[-1][0]) > 0.01 or abs(p[1] - dedup[-1][1]) > 0.01:
+            dedup.append(p)
+    return dedup
+
+
 def lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y, nx=None):
     """Route forward edges through per-gap lanes.
 
@@ -732,6 +758,9 @@ def build(config_path):
         groups.append({"id": k, "title": doc.subgraphs.get(k, k),
                        "x": round(b[0] - pad_g, 1), "y": round(b[1] - pad_g - 14, 1),
                        "w": round(gw, 1), "h": round(gh, 1), "members": sorted(b[4])})
+    geo = {idx: orthogonalize(p) for idx, p in geo.items()}
+    segs = [(idx, _seg(a, b)) for idx, p in geo.items() for a, b in zip(p, p[1:])]
+
     labels = []
     for idx, e in enumerate(edges):
         labels.append({"for": f"{e['src']}->{e['dst']}", "idx": idx, "pts": geo[idx],
