@@ -195,14 +195,14 @@ def test_a_box_is_sized_to_its_own_label(built):
     """
     lay = json.loads(RULES.read_text(encoding="utf-8"))["layout"]
     pad = lay.get("node_padding", 9)
-    # 最重要的方向：框必须装得下自己真正要画的那几行。以前量宽不辨全角，
-    # 中文按 5.9px 算（实际 ~12.4px），每个带中文的框都在漏字。
-    too_narrow = [n["id"] for n in built["nodes"]
-                  if n["w"] + 1 < max(graph_tool.text_width(l) for l in n["lines"]) + 2 * pad]
-    assert not too_narrow, f"框比自己的文字窄，字会出格: {too_narrow[:6]}"
+    # 量宽用代码同一个 box_width()：两边各算各的时，测试会“算得过”而图上字压线。
+    # 第二向也不得宽到拺了别人的空白。
+    need = {n["id"]: graph_tool.box_width(n["lines"], n["pad"]) for n in built["nodes"]}
+    too_narrow = [i for i, w in need.items()
+                  if next(n for n in built["nodes"] if n["id"] == i)["w"] + 1 < w]
+    assert not too_narrow, f"框比自己的文字窄，字会出格（被 node_max_width 副了？）: {too_narrow[:6]}"
     too_wide = [n["id"] for n in built["nodes"]
-                if n["w"] > max(graph_tool.text_width(l) for l in n["lines"]) + 2 * pad + max(
-                    1.0, lay.get("node_min_width", 56))]
+                if n["w"] > need[n["id"]] + lay.get("node_min_width", 56)]
     assert not too_wide, f"框比自己的文字宽了一个最小宽度，白占别人空白: {too_wide[:6]}"
     assert len({round(n["w"]) for n in built["nodes"]}) > 1, "框宽全相等说明又退回统一宽度了"
 

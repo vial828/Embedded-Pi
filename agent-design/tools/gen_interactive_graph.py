@@ -57,6 +57,19 @@ LABEL_H = 12.0
 # --------------------------------------------------------------------------- #
 # rules
 # --------------------------------------------------------------------------- #
+def line_width(text, depth=0):
+    """节点标签某一行的真实渲染宽度：第一行 12px 粗体，其余 10px 正体。"""
+    return text_width(text, size=12 if depth == 0 else 10, bold=depth == 0)
+
+
+def box_width(lines, pad, min_w=0, max_w=float("inf")):
+    """一个框必须多宽——代码和测试共用这一个定义。
+
+    两边各自算宽度时，测试以为“窄”而图上是“宽”，字压线就漏过了测试。
+    """
+    return min(max_w, max(min_w, max(line_width(l, k) for k, l in enumerate(lines)) + 2 * pad))
+
+
 def load_rules(path):
     rules = json.loads(Path(path).read_text(encoding="utf-8"))
     # Keyed by colour alone. It used to be (colour, dashed), which worked only while
@@ -647,10 +660,7 @@ def build(config_path):
         head, _, rest = label.partition(" ")
         name_of[n] = (info.get(n, {}).get("name") or rest or "").strip()
         lines_of[n] = [ln for ln in [head, name_of[n]] if ln]
-    w_of = {n: min(max_w, max(min_w, max(
-                text_width(l, size=12 if k == 0 else 10, bold=(k == 0))
-                for k, l in enumerate(lines_of[n])) + 2 * pad))
-            for n in ids}
+    w_of = {n: box_width(lines_of[n], pad, min_w, max_w) for n in ids}
 
     # 高度按端口数算：出入线全部贴在同一侧的框边上，框高不够就是几个端口挤在
     # 21px 里——间距 3.6px，线和标签必然糊成一束。
