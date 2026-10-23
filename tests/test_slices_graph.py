@@ -194,10 +194,16 @@ def test_a_box_is_sized_to_its_own_label(built):
     render is worse than no statistic.
     """
     lay = json.loads(RULES.read_text(encoding="utf-8"))["layout"]
-    pad, lo, hi = lay.get("node_padding", 9), lay.get("node_min_width", 56), lay.get("node_max_width", 132)
+    pad = lay.get("node_padding", 9)
+    # 最重要的方向：框必须装得下自己真正要画的那几行。以前量宽不辨全角，
+    # 中文按 5.9px 算（实际 ~12.4px），每个带中文的框都在漏字。
+    too_narrow = [n["id"] for n in built["nodes"]
+                  if n["w"] + 1 < max(graph_tool.text_width(l) for l in n["lines"]) + 2 * pad]
+    assert not too_narrow, f"框比自己的文字窄，字会出格: {too_narrow[:6]}"
     too_wide = [n["id"] for n in built["nodes"]
-                if n["w"] > min(hi, max(lo, len(n["label"]) * 5.9 + 2 * pad)) + 1]
-    assert not too_wide, f"框比自己的标签宽，白占了别人的空白: {too_wide}"
+                if n["w"] > max(graph_tool.text_width(l) for l in n["lines"]) + 2 * pad + max(
+                    1.0, lay.get("node_min_width", 56))]
+    assert not too_wide, f"框比自己的文字宽了一个最小宽度，白占别人空白: {too_wide[:6]}"
     assert len({round(n["w"]) for n in built["nodes"]}) > 1, "框宽全相等说明又退回统一宽度了"
 
 

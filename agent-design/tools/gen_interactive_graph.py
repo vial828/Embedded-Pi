@@ -38,7 +38,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import mermaid_doc  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-CHAR_W = 5.9          # rough glyph width for label collision maths
+CHAR_W = 5.9          # 仅用于统计/兑底，真正的量宽走 text_width()
+
+
+def text_width(text, size=13):
+    """全角按整宽、半角按半宽算。
+
+    以前一律 5.9px/字，13px 字号下中文实际要 ~12.4px，于是每个带中文的框
+    都比自己的文字窄——字跑到框外面。量宽和画字必须用同一个函数。
+    """
+    return sum(size if ord(c) > 0x2E80 else size * 0.55 for c in text)
+
 LABEL_H = 12.0
 
 
@@ -383,10 +393,15 @@ def lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y, nx=None):
         la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
         if la < lb:
             src_x = (nx[e["src"]] if nx else x_of[la]) + w_of.get(e["src"], col_w.get(la, 0))
-            pts = [(src_x, out_y[idx])]
+            # 高度只在最后一跳改变。逐间隙跟虚拟节点的高度走，一条边会上下折好几次：
+            # 实测最绕的那条 20 个折点、绕行比 4.07。平穿 + 末尾下降后折点降到 3 个，
+            # 长度正好等于曼哈顿距离。
+            y_run = out_y[idx]
+            pts = [(src_x, y_run)]
             for g in range(la, lb):
-                y = in_y[idx] if g == lb - 1 else y_of.get(("d", (idx, g + 1)), in_y[idx])
-                pts.append((lane_x[(g, idx)], y))
+                pts.append((lane_x[(g, idx)], y_run))
+            if abs(in_y[idx] - y_run) > 0.5:
+                pts.append((lane_x[(lb - 1, idx)], in_y[idx]))
             pts.append(((nx[e["dst"]] if nx else x_of[lb]), in_y[idx]))
             geo[idx] = pts
     return geo
@@ -618,8 +633,19 @@ def build(config_path):
 
     # 框宽按各自标签算，不再全图统一。统一宽度等于按最长的那个标签给 31 个框留白：
     # 中位标签 8 个字，原来 152 的宽度里约一半是空的，整张图因此横向拉宽。
-    pad, min_w, max_w = layout.get("node_padding", 9), layout.get("node_min_width", 56), layout.get("node_max_width", 132)
-    w_of = {n: min(max_w, max(min_w, len(doc.nodes[n].label if n in doc.nodes else n) * CHAR_W + 2 * pad))
+    pad, min_w, max_w = layout.get("node_padding", 9), layout.get("node_min_width", 56), layout.get("node_max_width", 200)
+
+    # 框宽要按“真正画得下的那两行”算，而不是按标签总长算：
+    # 节点是 id 一行、名称一行，取两行的较宽者才是需要的宽度。
+    spec = rules.get("node_info") or {}
+    info = node_info(base, spec)
+    name_of, lines_of = {}, {}
+    for n in ids:
+        label = doc.nodes[n].label if n in doc.nodes else n
+        head, _, rest = label.partition(" ")
+        name_of[n] = (info.get(n, {}).get("name") or rest or "").strip()
+        lines_of[n] = [ln for ln in [head, name_of[n]] if ln]
+    w_of = {n: min(max_w, max(min_w, max(text_width(l) for l in lines_of[n]) + 2 * pad))
             for n in ids}
     w = max(w_of.values())      # 绕行通道仍按列内最宽算，保证列间留白一致
 
@@ -671,10 +697,19 @@ def build(config_path):
     # 80 上下之后，窄框所在的列之间会空出一整列的宽度 —— 图上那些"距离过长"就是它
     col_w = {l: max([w_of[it[1]] for it in row if it[0] == "n"], default=min_w)
              for l, row in layers.items()}
+
+    # 缝宽按需求分配：这条缝要过几条边，就给几条通道的宽度。
+    # 常数缝宽是框还窄的时候定的；框变宽后缝里装不下这些边，它们只能压框或挤成一束。
+    lane_pitch = layout.get("lane_pitch", 16)
+    demand = collections.Counter()
+    for e in edges:
+        la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
+        for g in range(min(la, lb), max(la, lb)):
+            demand[g] += 1
     x_of, cursor = {}, 0.0
     for l in sorted(layers):
         x_of[l] = cursor
-        cursor += col_w[l] + h_gap
+        cursor += col_w[l] + max(h_gap, demand[l] * lane_pitch)
 
     # 层框偏移：挪一层 = 挪它的全部节点（边按节点位置连，所以边自动跟着走）。
     # 这是给"把这一层挪到那儿"一个正当出口：Mermaid 里没有这个接口
@@ -707,13 +742,21 @@ def build(config_path):
         spread = h * 0.72
         return ny[node_id] + (k + 0.5) / len(order) * spread - spread / 2
 
-    back_lanes = {}
-    for idx, e in enumerate(edges):
-        if level_of.get(e["src"], 0) >= level_of.get(e["dst"], 0):
-            back_lanes[idx] = len(back_lanes)
-
     out_y = {idx: slot_y(e["src"], idx, out_slots[e["src"]], False) for idx, e in enumerate(edges)}
     in_y = {idx: slot_y(e["dst"], idx, in_slots[e["dst"]], True) for idx, e in enumerate(edges)}
+
+    # 圈层排序必须在端口 y 算完之后做。跳距小的圈要排在最内侧：
+    # 按纵向中点排的话，短跳也可能拿到 k=15，48px 的相邻跳被甩到 150px 外再绕回来。
+    def span(i):
+        return abs(out_y[i] - in_y[i])
+
+    same_lanes = {idx: k for k, idx in enumerate(sorted(
+        (i for i, e in enumerate(edges) if level_of.get(e["src"], 0) == level_of.get(e["dst"], 0)),
+        key=lambda i: (level_of.get(edges[i]["src"], 0), span(i))))}
+    back_lanes = {idx: k for k, idx in enumerate(sorted(
+        (i for i, e in enumerate(edges) if level_of.get(e["src"], 0) > level_of.get(e["dst"], 0)),
+        key=lambda i: (min(level_of.get(edges[i]["src"], 0), level_of.get(edges[i]["dst"], 0)),
+                       span(i))))}
     geo = lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y, nx)
 
     # 反向边与同列边：端点必须落在节点框边上，不能悬在顶边外面
@@ -722,16 +765,25 @@ def build(config_path):
             continue
         la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
         ya, yb = out_y[idx], in_y[idx]
-        lane = back_lanes[idx] % 6
         wa, wb = w_of.get(e["src"], w), w_of.get(e["dst"], w)
-        if la == lb:                       # 同列：从右侧绕出去再回来
-            x = x_of[la] + max(wa, wb) + 22 + lane * 11
-            geo[idx] = [(x_of[la] + wa, ya), (x, (ya + yb) / 2), (x_of[lb] + wb, yb)]
-        else:                              # 真反向：源左出、目标右入，走列间通道
+        # 折点直接给成正交的 4 点折线，不再让 orthogonalize 从斜线里猜折点：
+        # 猜出来的折点落在线段中点，一条边白白多出两个转角。
+        if la == lb:                       # 同列：能直连就直连，上下相邻的框不该绕到侧面
+            cy_a, cy_b = ny[e["src"]], ny[e["dst"]]
+            gap = (max(cy_a, cy_b) - h / 2) - (min(cy_a, cy_b) + h / 2)
+            if gap <= 26:                  # 上下相邻：底边→顶边，一条竖线，零折角
+                cx = min(nx[e["src"]] + w_of[e["src"]] / 2, nx[e["dst"]] + w_of[e["dst"]] / 2)
+                cx += (same_lanes.get(idx, 0) % 5 - 2) * 6
+                geo[idx] = [(cx, cy_a + h / 2 if cy_b > cy_a else cy_a - h / 2),
+                            (cx, cy_b - h / 2 if cy_b > cy_a else cy_b + h / 2)]
+            else:                          # 不相邻：贴本列右侧走最小圈
+                x = nx[e["src"]] + max(wa, wb) + 10 + same_lanes.get(idx, 0) * 7
+                geo[idx] = [(nx[e["src"]] + wa, ya), (x, ya), (x, yb), (nx[e["dst"]] + wb, yb)]
+        else:                              # 真反向：源左出、目标右入，竖段落在列间空档
+            n = max(1, len(back_lanes))
             lo, hi = x_of[lb] + wb, x_of[la]
-            geo[idx] = [(x_of[la], ya),
-                        (lo + (hi - lo) * (lane + 1) / 7.0, (ya + yb) / 2),
-                        (x_of[lb] + wb, yb)]
+            x = lo + (hi - lo) * (back_lanes.get(idx, 0) + 1) / (n + 1)
+            geo[idx] = [(nx[e["src"]], ya), (x, ya), (x, yb), (nx[e["dst"]] + wb, yb)]
 
     segs = [(owner, _boxed(_seg(a, b))) for owner, pts in geo.items()
             for a, b in zip(pts, pts[1:])]
@@ -771,7 +823,6 @@ def build(config_path):
     label_of = {lab["for"]: lab for lab in labels}
 
     spec = rules.get("node_info") or {}
-    info = node_info(base, spec)
     desc_col = spec.get("description_column", "output")
     panel_labels = spec.get("panel_labels", {})
     nodes = []
@@ -781,6 +832,7 @@ def build(config_path):
         nodes.append({"id": n, "x": nx[n], "y": ny[n] - h / 2,
                       "level": level_of.get(n, 0), "w": w_of[n], "h": h,
                       "label": doc.nodes[n].label if n in doc.nodes else n,
+                      "lines": lines_of[n],
                       "name": meta.pop("name", "") or (doc.nodes[n].label if n in doc.nodes else ""),
                       "desc": desc,
                       "extra": [[panel_labels.get(k, k), v] for k, v in meta.items() if v],
