@@ -221,10 +221,14 @@ function draw(){
       fill:state.focus === n.id ? '#DBEAFE' : '#fff',
       stroke:n.loop ? '#DC2626' : '#334155', 'stroke-width':1.6}));
     // 不再截断到 13 字：以前靠截断遮羞，真相是框比文字窄。现在框按文字算，全文画得下。
+    // 左右内缩统一用框算出来的 pad：以前左边写死 10、右边只剩 8，字普遍压右边线。
     const lines = n.lines && n.lines.length ? n.lines : [n.id, n.name || ''];
-    const t = el('text', {x:10, y:17}); t.textContent = lines[0] + (n.loop ? ' ⟳' : ''); gg.appendChild(t);
+    const pad = n.pad || 10;
+    const y0 = n.h / 2 - (lines.length > 1 ? 3 : -4);
+    const t = el('text', {x:pad, y:y0, 'font-size':12, 'font-weight':700});
+    t.textContent = lines[0] + (n.loop ? ' ⟳' : ''); gg.appendChild(t);
     if(lines[1] !== undefined){
-      const t2 = el('text', {x:10, y:31, 'font-size':10, 'font-weight':400, fill:'#64748B'});
+      const t2 = el('text', {x:pad, y:y0 + 14, 'font-size':10, 'font-weight':400, fill:'#64748B'});
       t2.textContent = lines[1]; gg.appendChild(t2);
     }
     gg.onclick = ev => { ev.stopPropagation(); state.focus = state.focus === n.id ? null : n.id; info(); draw(); };

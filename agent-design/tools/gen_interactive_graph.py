@@ -41,13 +41,15 @@ HERE = Path(__file__).resolve().parent
 CHAR_W = 5.9          # 仅用于统计/兑底，真正的量宽走 text_width()
 
 
-def text_width(text, size=13):
-    """全角按整宽、半角按半宽算。
+def text_width(text, size=13, bold=False):
+    """全角按整宽、半角按半宽算，粗体再加 6%。
 
     以前一律 5.9px/字，13px 字号下中文实际要 ~12.4px，于是每个带中文的框
     都比自己的文字窄——字跑到框外面。量宽和画字必须用同一个函数。
+    粗体会比正体宽，不补这个余量就是“字压线”：框刚好等于文字宽。
     """
-    return sum(size if ord(c) > 0x2E80 else size * 0.55 for c in text)
+    w = sum(size if ord(c) > 0x2E80 else size * 0.55 for c in text)
+    return w * (1.06 if bold else 1.0)
 
 LABEL_H = 12.0
 
@@ -645,8 +647,20 @@ def build(config_path):
         head, _, rest = label.partition(" ")
         name_of[n] = (info.get(n, {}).get("name") or rest or "").strip()
         lines_of[n] = [ln for ln in [head, name_of[n]] if ln]
-    w_of = {n: min(max_w, max(min_w, max(text_width(l) for l in lines_of[n]) + 2 * pad))
+    w_of = {n: min(max_w, max(min_w, max(
+                text_width(l, size=12 if k == 0 else 10, bold=(k == 0))
+                for k, l in enumerate(lines_of[n])) + 2 * pad))
             for n in ids}
+
+    # 高度按端口数算：出入线全部贴在同一侧的框边上，框高不够就是几个端口挤在
+    # 21px 里——间距 3.6px，线和标签必然糊成一束。
+    deg_in = collections.Counter(e["dst"] for e in edges)
+    deg_out = collections.Counter(e["src"] for e in edges)
+    port_pitch = layout.get("port_pitch", 13)
+    h_of = {n: max(h, 30 if len(lines_of[n]) > 1 else h,
+                   max(deg_in.get(n, 0), deg_out.get(n, 0)) * port_pitch + 10)
+            for n in ids}
+    h = max(h_of.values())
     w = max(w_of.values())      # 绕行通道仍按列内最宽算，保证列间留白一致
 
     # y coordinate: slot index, centred per column
@@ -681,8 +695,15 @@ def build(config_path):
                     layers[l] = order
                     moved = True
                 # 压紧：保持顺序，逐个推到最小间隔，再整体平移对齐期望中心
+                # 压紧：保持顺序，逐个推到最小间隔，再整体平移对齐期望中心。
+                # 最小间隔按相邻两个框的实际高度算：统一行距是为了框高一致时省事，
+                # 现在框高已经随端口数变化，再拿常数当间隔就会压住。
+                gap_v = layout.get("row_gap", 22)
+                def _hh(it):
+                    return h_of[it[1]] if it[0] == "n" else 8
                 for i, it in enumerate(order):
-                    floor = y_of[order[i - 1]] + sy if i else want[it]
+                    floor = (y_of[order[i - 1]] + _hh(order[i - 1]) / 2 + _hh(it) / 2 + gap_v
+                             if i else want[it])
                     y_of[it] = max(want[it], floor)
                 shift = (sum(want[it] for it in order) / len(order)
                          - sum(y_of[it] for it in order) / len(order))
@@ -726,7 +747,7 @@ def build(config_path):
     # 越界不报错而是进统计并由测试拦下——布局工具里"生成成功但图不可读"是最坏的失败
     clash = [f"{a}×{b}" for i, a in enumerate(ids) for b in ids[i + 1:]
              if nx[a] < nx[b] + w_of[b] and nx[b] < nx[a] + w_of[a]
-             and ny[a] - h / 2 < ny[b] + h / 2 and ny[b] - h / 2 < ny[a] + h / 2]
+             and ny[a] - h_of[a] / 2 < ny[b] + h_of[b] / 2 and ny[b] - h_of[b] / 2 < ny[a] + h_of[a] / 2]
     if clash:
         print(f"  警告：{len(clash)} 对框重叠（检查 layer_boxes 的 dx/dy）：" + ", ".join(clash[:6]))
 
@@ -739,7 +760,9 @@ def build(config_path):
     def slot_y(node_id, idx, slots, back):
         order = sorted(slots, key=lambda i: ny[edges[i]["src" if back else "dst"]])
         k = order.index(idx)
-        spread = h * 0.72
+        # 端口扇开须跟着端口数走，但不得超过本框高度：超出就会贴在框外，
+        # 边看起来像没接上。高度已由 deg 撑开，所以这里两者能同时满足。
+        spread = min(h_of.get(node_id, h) - 10, len(order) * port_pitch)
         return ny[node_id] + (k + 0.5) / len(order) * spread - spread / 2
 
     out_y = {idx: slot_y(e["src"], idx, out_slots[e["src"]], False) for idx, e in enumerate(edges)}
@@ -770,12 +793,13 @@ def build(config_path):
         # 猜出来的折点落在线段中点，一条边白白多出两个转角。
         if la == lb:                       # 同列：能直连就直连，上下相邻的框不该绕到侧面
             cy_a, cy_b = ny[e["src"]], ny[e["dst"]]
-            gap = (max(cy_a, cy_b) - h / 2) - (min(cy_a, cy_b) + h / 2)
+            ha, hb = h_of[e["src"]], h_of[e["dst"]]
+            gap = (max(cy_a, cy_b) - max(ha, hb) / 2) - (min(cy_a, cy_b) + min(ha, hb) / 2)
             if gap <= 26:                  # 上下相邻：底边→顶边，一条竖线，零折角
                 cx = min(nx[e["src"]] + w_of[e["src"]] / 2, nx[e["dst"]] + w_of[e["dst"]] / 2)
                 cx += (same_lanes.get(idx, 0) % 5 - 2) * 6
-                geo[idx] = [(cx, cy_a + h / 2 if cy_b > cy_a else cy_a - h / 2),
-                            (cx, cy_b - h / 2 if cy_b > cy_a else cy_b + h / 2)]
+                geo[idx] = [(cx, cy_a + ha / 2 if cy_b > cy_a else cy_a - ha / 2),
+                            (cx, cy_b - hb / 2 if cy_b > cy_a else cy_b + hb / 2)]
             else:                          # 不相邻：贴本列右侧走最小圈
                 x = nx[e["src"]] + max(wa, wb) + 10 + same_lanes.get(idx, 0) * 7
                 geo[idx] = [(nx[e["src"]] + wa, ya), (x, ya), (x, yb), (nx[e["dst"]] + wb, yb)]
@@ -787,7 +811,7 @@ def build(config_path):
 
     segs = [(owner, _boxed(_seg(a, b))) for owner, pts in geo.items()
             for a, b in zip(pts, pts[1:])]
-    rects = [(nx[n] + w_of[n] / 2, ny[n] - h / 2, w_of[n], h) for n in ids]
+    rects = [(nx[n] + w_of[n] / 2, ny[n] - h_of[n] / 2, w_of[n], h_of[n]) for n in ids]
 
     # 分组框：成员按各自的列散布，框就按成员实际位置包一圈。以前交互图不画分组，
     # 于是它比 Mermaid 版难读，谁都不看它 —— 布局做得再好也没人看得见
@@ -797,10 +821,10 @@ def build(config_path):
         sub = doc.nodes.get(n).subgraph if n in doc.nodes else ""
         if not sub or sub in doc.legend_ids():
             continue
-        left, top = nx[n], ny[n] - h / 2
+        left, top = nx[n], ny[n] - h_of[n] / 2
         box = boxes.setdefault(sub, [left, top, left + w_of[n], top + h, []])
         box[0], box[1] = min(box[0], left), min(box[1], top)
-        box[2], box[3] = max(box[2], left + w_of[n]), max(box[3], top + h)
+        box[2], box[3] = max(box[2], left + w_of[n]), max(box[3], top + h_of[n])
         box[4].append(n)
     groups = []
     for k, b in sorted(boxes.items()):
@@ -829,8 +853,8 @@ def build(config_path):
     for n in ids:
         meta = dict(info.get(n, {}))
         desc = meta.pop(desc_col, "")
-        nodes.append({"id": n, "x": nx[n], "y": ny[n] - h / 2,
-                      "level": level_of.get(n, 0), "w": w_of[n], "h": h,
+        nodes.append({"id": n, "x": nx[n], "y": ny[n] - h_of[n] / 2, "pad": pad,
+                      "level": level_of.get(n, 0), "w": w_of[n], "h": h_of[n],
                       "label": doc.nodes[n].label if n in doc.nodes else n,
                       "lines": lines_of[n],
                       "name": meta.pop("name", "") or (doc.nodes[n].label if n in doc.nodes else ""),

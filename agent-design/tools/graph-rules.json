@@ -45,7 +45,7 @@
     "node_height": 30,
     "node_min_width": 56,
     "node_max_width": 200,
-    "node_padding": 9,
+    "node_padding": 14,
     "sweeps": 4,
     "compact_sweeps": 6,
     "row_sweeps": 6,
@@ -61,7 +61,8 @@
       }
     },
     "_layer_boxes_comment": "整层偏移与显式尺寸：layer_boxes.<子图id> 的 dx/dy 把该层连同其全部节点一起平移，w/h 把层框至少撑到那么大（节点不动）。这是 Mermaid 没有的能力——它的层框是派生的，没有尺寸和位置接口。改完跑 gen_interactive_graph.py 立即生效；越界由 box_overlaps 拦下，压住别的框会直接测试失败，不会悄悄生成一张读不了的图。",
-    "lane_pitch": 10
+    "lane_pitch": 10,
+    "port_pitch": 13
   },
   "node_info": {
     "md": "epi-dev-slices-overview.md",
