@@ -120,6 +120,45 @@ def straighten(pts, max_kink=20, span_dst=None):
     return pts
 
 
+def align_ports(edges, ny, h_of, out_y, in_y, port_pitch=13, max_step=45, sweeps=4):
+    """把一条边的两个接点拉同一高度，让它能一条直线走完。
+
+    原则（用户定）：对齐目标是“这条边在两个框上的接点 y 相同”，
+    不是对齐框的中线、也不是先挪框——挪框会改变 slot_y 的对端排序，形成反馈震荡
+    （试过：align_max_shift 放到 150 后折线反而更大）。
+
+    只动接点就没有这个反馈。两个约束：新 y 必须同时在两个框的高度范围内；
+    不得与同一侧的其他接点贴到不足 port_pitch（否则两条线在同一高度重叠）。
+    两框高度带交集为空时不强求，保持原样。
+    """
+    for _ in range(int(sweeps)):
+        moved = False
+        for i, e in enumerate(edges):
+            ya, yb = out_y[i], in_y[i]
+            step = abs(ya - yb)
+            if not 0.5 < step <= max_step:
+                continue
+            src, dst = e["src"], e["dst"]
+            a = (ny[src] - h_of[src] / 2 + 4, ny[src] + h_of[src] / 2 - 4)
+            b = (ny[dst] - h_of[dst] / 2 + 4, ny[dst] + h_of[dst] / 2 - 4)
+            lo, hi = max(a[0], b[0]), min(a[1], b[1])
+            if lo > hi:
+                continue                                  # 两框没有交集，本就该折
+            want = (ya + yb) / 2
+            y = min(max(want, lo), hi)
+            clash = any(abs(out_y[j] - y) < port_pitch for j in range(len(edges))
+                        if j != i and edges[j]["src"] == src) or \
+                    any(abs(in_y[j] - y) < port_pitch for j in range(len(edges))
+                        if j != i and edges[j]["dst"] == dst)
+            if clash:
+                continue
+            out_y[i] = in_y[i] = y
+            moved = True
+        if not moved:
+            break
+    return out_y, in_y
+
+
 def load_rules(path):
     rules = json.loads(Path(path).read_text(encoding="utf-8"))
     # Keyed by colour alone. It used to be (colour, dashed), which worked only while
@@ -840,6 +879,11 @@ def build(config_path):
         (i for i, e in enumerate(edges) if level_of.get(e["src"], 0) > level_of.get(e["dst"], 0)),
         key=lambda i: (min(level_of.get(edges[i]["src"], 0), level_of.get(edges[i]["dst"], 0)),
                        span(i))))}
+    out_y, in_y = align_ports(edges, ny, h_of, out_y, in_y,
+                              layout.get("port_pitch", 13),
+                              layout.get("align_max_step", 45),
+                              layout.get("align_sweeps", 4))
+
     geo = lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y, nx)
 
     # 反向边与同列边：端点必须落在节点框边上，不能悬在顶边外面
