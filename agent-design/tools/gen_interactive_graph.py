@@ -864,6 +864,13 @@ def build(config_path):
         spread = min(h_of.get(node_id, h) - 10, len(order) * port_pitch)
         return ny[node_id] + (k + 0.5) / len(order) * spread - spread / 2
 
+    # 单个框的微调：声明式写在规则里，而不是让算法自己找位置。
+    # S02->S09 这类边两框纵向根本不重叠，接点对齐无解，只能把框抬高一点；
+    # 不用自动对齐算法是因为它会改变 slot_y 的排序、进而改变接点，形成反馈。
+    for nid, dny in layout.get("node_nudge", {}).items():
+        if nid in ny:
+            ny[nid] += float(dny)
+
     out_y = {idx: slot_y(e["src"], idx, out_slots[e["src"]], False) for idx, e in enumerate(edges)}
     in_y = {idx: slot_y(e["dst"], idx, in_slots[e["dst"]], True) for idx, e in enumerate(edges)}
 
