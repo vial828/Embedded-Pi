@@ -70,6 +70,56 @@ def box_width(lines, pad, min_w=0, max_w=float("inf")):
     return min(max_w, max(min_w, max(line_width(l, k) for k, l in enumerate(lines)) + 2 * pad))
 
 
+def simplify(pts):
+    """合并重复点与共线点。
+
+    源、目标中线齐平时路由仍会吐出 (x,y)->(x2,y)->(x2,y)->(x3,y)：看着是直线，
+    数据上却是四个点，也没法拿“这条边是直线”做断言。
+    """
+    out = [tuple(pts[0])]
+    for p in pts[1:]:
+        p = tuple(p)
+        if abs(p[0] - out[-1][0]) < 0.01 and abs(p[1] - out[-1][1]) < 0.01:
+            continue
+        out.append(p)
+    kept = [out[0]]
+    for p, q in zip(out[1:-1], out[2:]):
+        collinear = (abs(kept[-1][0] - p[0]) < 0.01 and abs(p[0] - q[0]) < 0.01) or \
+                    (abs(kept[-1][1] - p[1]) < 0.01 and abs(p[1] - q[1]) < 0.01)
+        if not collinear:
+            kept.append(p)
+    kept.append(out[-1])
+    return kept
+
+
+def straighten(pts, max_kink=20, span_dst=None):
+    """抹掉小折弯：两段横线只差几个像素时，把它们并成一条。
+
+    这种短竖段不是“为了避开什么”，而是端口与通道各自取 y 留下的尾差：消除它对
+    绕行长度几乎无损，视觉上却能把一整片图从“每根线都在抽抬”变成直线。
+    span_dst 给定时，合并后目标接点仍须落在目标框内——不能为了直线把线头挪出框。
+    """
+    pts = [tuple(p) for p in pts]
+    for _ in range(len(pts)):
+        hit = None
+        for i in range(1, len(pts) - 1):
+            if abs(pts[i - 1][0] - pts[i][0]) < 0.5:      # 竖段
+                dy = pts[i][1] - pts[i - 1][1]
+                if 0.5 < abs(dy) <= max_kink:
+                    hit = (i, -dy)
+                    break
+        if hit is None:
+            break
+        i, shift = hit
+        cand = pts[:i] + [(p[0], p[1] + shift) for p in pts[i:]]
+        if span_dst is not None:
+            cy, half = (span_dst[0] + span_dst[1]) / 2, (span_dst[1] - span_dst[0]) / 2 - 2
+            if abs(cand[-1][1] - cy) > max(half, 0):
+                break          # 会把接点推出目标框，宁留折弯
+        pts = simplify(cand)
+    return pts
+
+
 def load_rules(path):
     rules = json.loads(Path(path).read_text(encoding="utf-8"))
     # Keyed by colour alone. It used to be (colour, dashed), which worked only while
@@ -844,7 +894,12 @@ def build(config_path):
         groups.append({"id": k, "title": doc.subgraphs.get(k, k),
                        "x": round(b[0] - pad_g, 1), "y": round(b[1] - pad_g - 14, 1),
                        "w": round(gw, 1), "h": round(gh, 1), "members": sorted(b[4])})
-    geo = {idx: orthogonalize(p) for idx, p in geo.items()}
+    # 三步必须按这个顺序：先保证只有横平竖直（正交化的测试在断言它），再合共线点，
+    # 最后抹小折弯——顺序反了会把斜线当成横线合并。
+    geo = {idx: straighten(simplify(orthogonalize(p)), layout.get("max_kink", 20),
+                           (ny[edges[idx]["dst"]] - h_of[edges[idx]["dst"]] / 2,
+                            ny[edges[idx]["dst"]] + h_of[edges[idx]["dst"]] / 2))
+           for idx, p in geo.items()}
     segs = [(idx, _seg(a, b)) for idx, p in geo.items() for a, b in zip(p, p[1:])]
 
     labels = []
