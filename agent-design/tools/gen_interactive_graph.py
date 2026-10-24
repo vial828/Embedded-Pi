@@ -465,6 +465,59 @@ def orthogonalize(pts):
     return dedup
 
 
+def _hits_rect(pts, rect, pad):
+    """折线是否穿过矩形（含 pad 安全边距）。段都是轴对齐的，判据就是区间相交。"""
+    rx1, ry1, rx2, ry2 = rect
+    for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+        if (min(ax, bx) < rx2 - pad and max(ax, bx) > rx1 + pad
+                and min(ay, by) < ry2 - pad and max(ay, by) > ry1 + pad):
+            return True
+    return False
+
+
+def detour_route(edges, geo, nodes_rect, edges_at, gap=16.0, max_step=90.0):
+    """声明式绕行：把一条边压在某个框上的横段，改到从该框下方绕过。
+
+    为什么是声明式而不是自动避障：通用避障等于重排整列，代价是把别的边全推歪；而
+    "这条线不许穿那个框"本来就是人的判断。键是边（"S10->S15"），值 {"below": ["S11"]}。
+    判据沿用同列边的老规则：压住了才绕，没压住不绕。
+
+    只改一处几何：把压在框上的那段横线 y 下移到框下沿 + gap，两端各补一个拐点接回
+    原来的进出线 —— 首尾端点不动，所以"端点必须贴框"的约束不会被破坏。超过 max_step
+    就告警保持原样：宁可留一条穿框线，也不要静默产出一张把别的边全推歪的图。
+    """
+    gap = float(edges_at.get("gap", gap))
+    max_step = float(edges_at.get("max_step", max_step))
+    for key, spec in edges_at.items():
+        if "->" not in key or not isinstance(spec, dict):
+            continue
+        idx = next((i for i, e in enumerate(edges)
+                    if f"{e['src']}->{e['dst']}" == key), None)
+        if idx is None or idx not in geo:
+            print(f"  警告：route_avoid 的 {key} 没匹配到边，检查拼写")
+            continue
+        pts = [tuple(q) for q in geo[idx]]
+        for nid in spec.get("below") or []:
+            if nid not in nodes_rect or nid in (edges[idx]["src"], edges[idx]["dst"]):
+                print(f"  警告：{key} 要绕的 {nid} 不是节点，或它就是这条边的端点")
+                continue
+            rect = nodes_rect[nid]
+            segs = [(k, a, b) for k, (a, b) in enumerate(zip(pts, pts[1:]))
+                    if _hits_rect([a, b], rect, 0.5)]
+            if not segs:
+                continue                                 # 没压住，不绕
+            k, (ax, ay), (bx, _by) = segs[0]
+            y_to = rect[3] + gap
+            if y_to - ay > max_step:
+                print(f"  警告：{key} 绕 {nid} 要把横线从 {ay:.0f} 下移到 {y_to:.0f}，"
+                      f"超过 route_avoid.max_step={max_step:.0f}，保持原样")
+                continue
+            # ax->bx 压在框上：bx 是它离开框右沿的位置，也是重新抬高的位置
+            pts = simplify(list(pts[:k + 1]) + [(ax, y_to), (bx, y_to), (bx, ay)]
+                           + list(pts[k + 2:]))
+        geo[idx] = pts
+
+
 def lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y, nx=None):
     """Route forward edges through per-gap lanes.
 
@@ -856,8 +909,23 @@ def build(config_path):
         out_slots[e["src"]].append(idx)
         in_slots[e["dst"]].append(idx)
 
+    port_order = layout.get("port_order", {})
+
+    def edge_name(i):
+        return f"{edges[i]['src']}->{edges[i]['dst']}"
+
     def slot_y(node_id, idx, slots, back):
-        order = sorted(slots, key=lambda i: ny[edges[i]["src" if back else "dst"]])
+        # 默认按"对端 y"排。人工覆盖是声明式的：port_order.<node> = ["S10->S11", ...]，
+        # 从上到下的先后由人写，算法不猜 —— 同侧两口的上下关系有时与线长、交叉都无关，
+        # 只和读图习惯有关（"进 S11 的那根应该走下面"）。没列出的接在后面按对端 y。
+        want = port_order.get(node_id) or []
+        if want:
+            known = [i for i in slots if edge_name(i) in want]
+            rest = sorted((i for i in slots if i not in known),
+                          key=lambda i: ny[edges[i]["src" if back else "dst"]])
+            order = sorted(known, key=lambda i: want.index(edge_name(i))) + rest
+        else:
+            order = sorted(slots, key=lambda i: ny[edges[i]["src" if back else "dst"]])
         k = order.index(idx)
         # 端口扇开须跟着端口数走，但不得超过本框高度：超出就会贴在框外，
         # 边看起来像没接上。高度已由 deg 撑开，所以这里两者能同时满足。
@@ -892,6 +960,15 @@ def build(config_path):
                               layout.get("align_sweeps", 4))
 
     geo = lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y, nx)
+
+    # 声明式绕行（S10->S15 不许平穿 S11）。放在后处理之前：straighten 只并小折弯，
+    # 这里绕行的竖段远大于 max_kink，不会被抹掉。
+    avoid = layout.get("route_avoid") or {}
+    if avoid:
+        detour_route(edges, geo,
+                     {n: (nx[n], ny[n] - h_of[n] / 2, nx[n] + w_of[n], ny[n] + h_of[n] / 2)
+                      for n in ids},
+                     avoid)
 
     # 反向边与同列边：端点必须落在节点框边上，不能悬在顶边外面
     for idx, e in enumerate(edges):
