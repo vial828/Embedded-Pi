@@ -179,6 +179,68 @@ def test_edge_endpoints_touch_their_nodes(built):
     assert not loose, f"{len(loose)} 条边端点悬空，例如 {loose[:4]}"
 
 
+def _box(n):
+    return (n["x"], n["y"], n["x"] + n["w"], n["y"] + n["h"])
+
+
+def _through(e, n, tol=0.5):
+    """这条边的折线是否穿过框 n（端点框除外，由调用方排除）。"""
+    x1, y1, x2, y2 = _box(n)
+    return any(max(ax, bx) > x1 + tol and min(ax, bx) < x2 - tol
+               and max(ay, by) > y1 + tol and min(ay, by) < y2 - tol
+               for (ax, ay), (bx, by) in zip(e["pts"], e["pts"][1:]))
+
+
+def test_declared_detours_actually_avoid_their_boxes(built):
+    """route_avoid 里写了一条，就必须真的不穿那个框。
+
+    这是用户点名的约束（去 S15 的线不许穿过 S11，要从它下方绕）。以前生成器里
+    没有任何避障代码，前向边一律平穿，所以这类问题只能靠人眼发现、反复出现。
+    断言写在规则上而不是写死 S10->S15：以后加一条绕行，自动纳入验收。
+    """
+    lay = json.loads(RULES.read_text(encoding="utf-8"))["layout"]
+    avoid = {k: v for k, v in lay.get("route_avoid", {}).items() if "->" in k}
+    assert avoid, "graph-rules.json 的 layout.route_avoid 不见了"
+    nodes = {n["id"]: n for n in built["nodes"]}
+    for key, spec in avoid.items():
+        edge = next((e for e in built["edges"] if f"{e['s']}->{e['t']}" == key), None)
+        assert edge, f"route_avoid 里的 {key} 在图里找不到这条边"
+        for nid in spec.get("below") or []:
+            assert nid in nodes, f"route_avoid 要绕的 {nid} 不是节点"
+            assert not _through(edge, nodes[nid]), f"{key} 声明了绕行却仍穿过 {nid}"
+            # 绕行段必须在框下方。端点 x 贴的是源/目标框的边（可能落在本框横向区间外），
+            # 所以“经过哪些 x”要按拐点与线段一起看。
+            bx1, _by1, bx2, _by2 = box = _box(nodes[nid])
+
+            def spans_box(p, q, x1=bx1, x2=bx2):
+                return min(p[0], q[0]) < x2 and max(p[0], q[0]) > x1
+
+            ys = [y for p, q in zip(edge["pts"], edge["pts"][1:], strict=False)
+                  if spans_box(p, q) for y in (p[1], q[1])]
+            assert ys and min(ys) > box[3], \
+                f"{key} 没有从 {nid} 下方绕（应在 y>{box[3]:.0f}）"
+
+
+def test_declared_port_order_is_the_drawn_top_to_bottom_order(built):
+    """port_order 写的是“这一侧从上到下谁先”，图上就必须是这个顺序。
+
+    端口 y 由 slot_y() 按对端高度自动排，没有人工入口时只能接受算法的结果；
+    有了声明式覆盖就要能被验证，否则它和“改了没生效”无法区分。
+    """
+    lay = json.loads(RULES.read_text(encoding="utf-8"))["layout"]
+    order_cfg = {k: v for k, v in lay.get("port_order", {}).items() if isinstance(v, list)}
+    assert order_cfg, "graph-rules.json 的 layout.port_order 不见了"
+    nodes = {n["id"]: n for n in built["nodes"]}
+    for nid, want in order_cfg.items():
+        right = _box(nodes[nid])[2] - 1          # 出侧接点在框右边
+        got = sorted((e["pts"][0][1], f"{e['s']}->{e['t']}") for e in built["edges"]
+                     if e["s"] == nid and abs(e["pts"][0][0] - right) < 1)
+        seq = [k for _y, k in got]
+        listed = [k for k in seq if k in want]
+        assert listed == [k for k in want if k in seq], \
+            f"{nid} 出侧端口顺序是 {listed}，规则要的是 {want}"
+
+
 def test_layer_offsets_do_not_stack_boxes(built):
     """偏移给人自由度，这条是它的边界。压住的图仍然'生成成功'，所以只能由数来拦。"""
     bad = built["stats"]["box_overlaps"]
