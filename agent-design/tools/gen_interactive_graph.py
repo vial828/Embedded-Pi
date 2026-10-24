@@ -159,6 +159,99 @@ def align_ports(edges, ny, h_of, out_y, in_y, port_pitch=13, max_step=45, sweeps
     return out_y, in_y
 
 
+def spread_side(keys, y_of, pitch, lo, hi, anchors=(), x_of=None):
+    """把同一侧接点的最小间距抬到 pitch —— 钉住的（anchors）不动，其余让开。
+
+    为什么需要它：slot_y() 只在框高里按对端 y 扇开，align_ports() 又会把几条边拉到同一
+    高度，两者都没保证"最终间距"，实测 S11 入侧挤到 2.3px（两条线看着像一根）。
+
+    四条规矩都是试出来的，每条对应一次回退：
+    - 保持原有上下先后，只加间距不换位置 —— 否则会把 port_order 人工交换过的线换回去。
+    - 每轮只解"最挤的一对"，往下补、顶到框底才往上补。整组等距重排会把对齐成直线的边
+      白白拉折（直线边 18 -> 10、折点 +16）；上下各挪一半会把接点抬进上方别的边的横段
+      里（IN_PRD->S18 就叠上去了）。
+    - x_of：同一根出口竖线上的接脚不算密集。同一个通道里的几条横线本来就要在同一点
+      汇合，那是汇聚不是重叠；把它们拉开反而多出折角（S22 出侧三条同通道的边 +2 折点）。
+      真正要分开的是贴同一根框边、却走不同通道的接口（S11 入侧就是）。
+    - 只在"这一侧最终能完全拉开"时才动手。半拉比不拉更差：实测折点 +8、直线边 -1。
+    """
+    if len(keys) < 2:
+        return {}
+
+    def same_lane(a, b):
+        return bool(x_of) and x_of[a] == x_of[b]
+
+    pitch = min(float(pitch), (hi - lo) / (len(keys) - 1))
+    if pitch <= 0 or hi - lo < (len(keys) - 1) * pitch - 0.01:
+        return {}                                        # 这一侧装不下：整侧不动
+    got = {k: float(y_of[k]) for k in keys}
+    order = sorted(keys, key=lambda k: (got[k], k))
+    for _ in range(len(keys) * len(keys) + 4):
+        tight = [(got[b] - got[a], a, b) for a, b in zip(order, order[1:])
+                 if not same_lane(a, b) and got[b] - got[a] < pitch - 0.01]
+        if not tight:
+            break
+        _gap, a, b = min(tight, key=lambda t: t[0])       # 最挤的一对先解
+        need = pitch - (got[b] - got[a])
+        if b not in anchors and got[b] + need <= hi + 0.01:
+            got[b] += need                                # 下面还有地方
+        elif a not in anchors:
+            got[a] = max(got[a] - need, lo)               # 顶到框底，往上让
+        else:
+            break                                         # 两端都钉住：宁可维持原样
+    if any(not same_lane(a, b) and got[b] - got[a] < pitch - 0.01
+           for a, b in zip(order, order[1:])):
+        return {}                                         # 拉不开：保持原样
+    return {k: v for k, v in got.items()
+            if k not in anchors and abs(v - y_of[k]) > 0.01}
+
+
+def spread_sides(geo, edges, level_of, pitch, ny, h_of, port_order, avoid):
+    """按"同一个框的同一根边"分组拉开接点，再把新 y 写回折线。
+
+    为什么不能用 out_slots / in_slots：它们只按 src、dst 分。S10 出侧看着"已经拉开"，
+    其实那两条线一条是 IN_HW->S10（右入）、一条是 S10->S11（右出），贴的是同一根边；
+    分成两组就永远查不出来。反向边的接口贴在框的左边，同理要单独一组。
+
+    写回只沿"和该接口在同一根竖段"的点接回去，别的拐点不碰 —— 端点一挪接不上去的话
+    第一条横线就被拉斜（正交化的测试会拦下斜线，所以这里必须自己接好）。
+    """
+    groups = collections.defaultdict(list)
+    for i, e in enumerate(edges):
+        back = level_of.get(e["src"], 0) >= level_of.get(e["dst"], 0)
+        # (框, 左/右)：正边 右出→左入；反向边 左出→右入（和路由的写法一致）
+        groups[(e["src"], "left" if back else "right")].append((i, 0))
+        groups[(e["dst"], "right" if back else "left")].append((i, -1))
+
+    def pinned(i):
+        name = f"{edges[i]['src']}->{edges[i]['dst']}"
+        return name in avoid or \
+            name in (port_order.get(edges[i]["src"]) or []) or \
+            name in (port_order.get(edges[i]["dst"]) or [])
+
+    for (nid, _side), ports in groups.items():
+        if len(ports) < 2:
+            continue
+        tag = lambda p_: f"{p_[0]}:{p_[1]}"              # noqa: E731
+        moved = spread_side([tag(p_) for p_ in ports],
+                            {tag(p_): geo[p_[0]][p_[1]][1] for p_ in ports},
+                            pitch, ny[nid] - h_of[nid] / 2 + 4,
+                            ny[nid] + h_of[nid] / 2 - 4,
+                            [tag(p_) for p_ in ports if pinned(p_[0])],
+                            {tag(p_): geo[p_[0]][p_[1]][0] for p_ in ports})
+        for k, y in moved.items():
+            i, j = (int(v) for v in k.split(":"))
+            pts = list(geo[i])
+            step = 1 if j == 0 else -1
+            out = list(pts)
+            out[j] = (pts[j][0], y)
+            m = j + step
+            while 0 < m < len(out) and abs(out[m][0] - out[m - step][0]) < 0.5:
+                out[m] = (out[m][0], y)
+                m += step
+            geo[i] = simplify(out)
+
+
 def load_rules(path):
     rules = json.loads(Path(path).read_text(encoding="utf-8"))
     # Keyed by colour alone. It used to be (colour, dashed), which worked only while
@@ -1022,6 +1115,11 @@ def build(config_path):
         groups.append({"id": k, "title": doc.subgraphs.get(k, k),
                        "x": round(b[0] - pad_g, 1), "y": round(b[1] - pad_g - 14, 1),
                        "w": round(gw, 1), "h": round(gh, 1), "members": sorted(b[4])})
+    # 接点最小间距（横向密集的主因）。放在最后、按最终几何拉开：align_ports 与绕行都会
+    # 把接点拉到同一高度，先拉开再对齐等于白拉；而反向边/同列边的折线在上面那段才建好。
+    spread_sides(geo, edges, level_of, layout.get("port_pitch", 13), ny, h_of,
+                 port_order, layout.get("route_avoid") or {})
+
     # 三步必须按这个顺序：先保证只有横平竖直（正交化的测试在断言它），再合共线点，
     # 最后抹小折弯——顺序反了会把斜线当成横线合并。
     geo = {idx: straighten(simplify(orthogonalize(p)), layout.get("max_kink", 20),
