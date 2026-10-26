@@ -64,8 +64,10 @@
     "lane_pitch": 10,
     "port_pitch": 13,
     "node_nudge": {
-      "S09": -20
+      "S09": -20,
+      "S17": -200
     },
+    "_node_nudge_comment": "单个框的纵向微调（像素，负=上抬）。S09：接点纵向对不齐、只能抬框。S17：它是核心层里唯一和记忆簇互连的节点，邻居全部在画布上半部，refine_y 把它拉到中位数以下 → 整层被它拖长；上抬后 AgentCore 层框从 766px 降到 566px、画布少 200px。",
     "_port_order_comment": "某个框某一侧的端口先后（从上到下），写边的写法 S10->S11。默认按对端高度自动排；这里列出的边按列出顺序排，没列的接在后面。用于‘同侧两口的上下关系’这种算法无从判断、只有人能定的事。",
     "port_order": {
       "S10": [
@@ -80,7 +82,18 @@
           "S11"
         ]
       }
-    }
+    },
+    "group_clear": 18,
+    "group_min_move": 24,
+    "_group_min_move_comment": "小于这个位移就不搬整层（搬一层会牵动它所有边的走线）。24 是实测值：Memory / AgentCore 差 36px，再大就解不开。",
+    "layer_lock": [
+      "Delivery"
+    ],
+    "_layer_lock_comment": "只锁 Delivery：它横跨 L5-L7、右边没有别的列，压住谁都只是横向擦过。Schema 不锁 —— 它压在 Knowledge / AgentCore 上面才是真正读不动的那种重叠（三块框叠在一起），让开之后层框零压住，代价是画布高 504px。之前把 Schema 也锁上是为了省这 504px，结果就是那张读不动的图。",
+    "col_gap_extra": {
+      "4": 160
+    },
+    "_col_gap_extra_comment": "某条列间缝额外加宽的像素（键是列号）。L4/L5 那条缝里叠着两股线：同列边的右侧绕行带 + 跨列边的通道，谁也不知道对方的 x，挤成 1-8px。加宽这条缝是唯一不牺牲可读性的解法（实测贴太紧 25 -> 15、穿框 15 -> 1），代价是画布宽 160px。"
   },
   "node_info": {
     "md": "epi-dev-slices-overview.md",

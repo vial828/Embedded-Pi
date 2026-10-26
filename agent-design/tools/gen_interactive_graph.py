@@ -26,6 +26,7 @@ import argparse
 import collections
 import itertools
 import json
+import math
 import os
 import re
 import sys
@@ -207,7 +208,7 @@ def spread_side(keys, y_of, pitch, lo, hi, anchors=(), x_of=None):
 
 
 def spread_sides(geo, edges, level_of, pitch, ny, h_of, port_order, avoid):
-    """按"同一个框的同一根边"分组拉开接点，再把新 y 写回折线。
+    """按"同一个框的同一根边"分组拉开接点，再把新 y 写回折线。返回没拉开的接点对数。
 
     为什么不能用 out_slots / in_slots：它们只按 src、dst 分。S10 出侧看着"已经拉开"，
     其实那两条线一条是 IN_HW->S10（右入）、一条是 S10->S11（右出），贴的是同一根边；
@@ -215,6 +216,9 @@ def spread_sides(geo, edges, level_of, pitch, ny, h_of, port_order, avoid):
 
     写回只沿"和该接口在同一根竖段"的点接回去，别的拐点不碰 —— 端点一挪接不上去的话
     第一条横线就被拉斜（正交化的测试会拦下斜线，所以这里必须自己接好）。
+
+    返回的对数是给人的信号：这一侧的框高装不下这么多接口，只能靠加高节点或改布局解决，
+    不是这里能猜的。
     """
     groups = collections.defaultdict(list)
     for i, e in enumerate(edges):
@@ -229,6 +233,7 @@ def spread_sides(geo, edges, level_of, pitch, ny, h_of, port_order, avoid):
             name in (port_order.get(edges[i]["src"]) or []) or \
             name in (port_order.get(edges[i]["dst"]) or [])
 
+    tight = 0
     for (nid, _side), ports in groups.items():
         if len(ports) < 2:
             continue
@@ -250,6 +255,307 @@ def spread_sides(geo, edges, level_of, pitch, ny, h_of, port_order, avoid):
                 out[m] = (out[m][0], y)
                 m += step
             geo[i] = simplify(out)
+        ys = sorted(geo[i][j][1] for i, j in ports)
+        tight += sum(1 for a, b in zip(ys, ys[1:]) if b - a < pitch - 0.01)
+    return tight
+
+
+
+
+
+def layer_rank(group_ids, edges_between, tie_break=None):
+    """层与层的上下次序：按依赖排，被依赖的在上（和"左出右入"同一个方向感）。
+
+    为什么不能"谁面积大谁当主轴、小的贴过去"：那只是把重叠消掉，层序会变成随机的 ——
+    实测外部输入层被推到基础层下面，读图的人第一句就是"输入怎么在中间"。
+    边的方向本身就是语义（S02 -> S08 -> S15），层的纵向次序必须由它定。
+
+    三步，每步都对应一次回退：
+    1. 传递闭包（a 能走到 b，a 就在 b 上面）。不能用"最长路径 + 丢掉环里的边"：Memory ->
+       AgentCore 正好在记忆簇那个大环里，一丢就把"记忆先于核心"这条真实次序也丢了。
+    2. 互相可达的层折成一个点（SCC）—— 它们本来就在来回，属于同一层，名次并列。给它们排
+       出先后的话，同一列会串成一条长队（L4 那列排到 1673px）。并排摊开是 spread_layers 的事。
+    3. 折完才是 DAG：堆的名次 = 它上面还有几个堆。注意"上面有几个"要按堆去重 —— 直接数
+       层数的话，一堆里三个并列的层会被重复计入，名次全部挤在一起（实测全图只排出 0/1/2）。
+
+    tie_break：并列时给个起点（一般给当前顶边），只影响同堆内的展开次序，不影响名次。
+    """
+    key = tie_break or (lambda gid: 0.0)
+    ids = sorted(group_ids, key=key)
+    down = collections.defaultdict(set)
+    for a, b in edges_between:
+        if a in group_ids and b in group_ids and a != b:
+            down[a].add(b)
+
+    def reach(src):
+        seen, queue = set(), [src]
+        while queue:
+            cur = queue.pop()
+            for nxt in down[cur]:
+                if nxt not in seen:
+                    seen.add(nxt)
+                    queue.append(nxt)
+        return seen
+
+    below = {i: reach(i) & set(ids) for i in ids}         # 能走到的都在它下面
+
+    comp_of, comp = {}, []                                # 互相可达归一堆，堆内并列
+    for i in ids:
+        if i in comp_of:
+            continue
+        c = [j for j in ids if j not in comp_of and (i in below[j] or j == i)
+             and (j in below[i] or i == j)]
+        for j in c:
+            comp_of[j] = len(comp)
+        comp.append(c)
+
+    above, under = collections.defaultdict(set), collections.defaultdict(set)
+    for a in ids:
+        ca = comp_of[a]
+        for b in below[a]:
+            cb = comp_of[b]
+            if ca != cb:
+                above[cb].add(ca)                          # 按堆去重，一条边数一次
+                under[ca].add(cb)
+    rank = {ci: len(above[ci]) for ci in range(len(comp))}
+    return {gid: rank[comp_of[gid]] for gid in group_ids}
+
+
+
+def stack_layers(members_of, y_of, nx, w_of, h_of, pad, rank, layer_off, locked=(),
+                 clear=18.0, min_move=24.0):
+    """把纵向叠住的层按依赖次序整层下移。返回是否全部解开。
+
+    两条规矩，每条对应一次回退：
+    - 只往下挪，绝不把已经在下面的层提上来。否则会变成"躲开一个又压住下一个"的来回跳，
+      拓扑序也会被打乱（Memory 被抬到画布顶、Foundation 掉到底）。
+    - 改的是 y_of[("n", 成员)] —— 节点坐标的唯一来源。改换算值 ny 是没用的：端口高度由它
+      推出来，第一次那么写就留下 34 条端点悬空的边（框动了、线留在原地）。
+
+    locked = 不许搬也不参与推挤的层（layer_lock）：横跨多列的长条层和谁都叠得上，拿它当
+    参照别人就得一路让到底。剩下的重叠由调用方报出来 —— 要人调 col_gap / layer_boxes。
+
+    min_move：小于这个数就不动 —— 搬一整层会牵动它所有边的走线，为几个像素不值得；
+    真差得多的（Memory / AgentCore 差 36px）才会被搬。返回 False = 还有压住的。
+    """
+    def top(m):
+        return y_of[("n", m)] + layer_off(m)[1] - h_of[m] / 2
+
+    def rect(gid):
+        ms = members_of[gid]
+        x1 = min(nx[m] for m in ms) - pad
+        x2 = max(nx[m] + w_of[m] for m in ms) + pad
+        y1 = min(top(m) for m in ms) - pad
+        y2 = max(top(m) + h_of[m] for m in ms) + pad
+        return (x1, y1, x2 - x1, y2 - y1)
+
+    ids = [g for g in sorted(members_of) if g not in set(locked)]
+    for _ in range(len(ids) * len(ids) + 4):
+        hits = []
+        for x, y in itertools.combinations(ids, 2):
+            a, b = rect(x), rect(y)
+            ox = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
+            oy = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
+            if ox > clear and oy > clear:
+                hits.append((ox * oy, x, y))
+        if not hits:
+            return True
+        _area, x, y = max(hits, key=lambda t: t[0])
+        upper, lower = (x, y) if rank.get(x, 0) <= rank.get(y, 0) else (y, x)
+        need = (rect(upper)[1] + rect(upper)[3] + clear) - rect(lower)[1]
+        if abs(need) < min_move:
+            return False
+        for m in members_of[lower]:
+            y_of[("n", m)] += need                              # 节点坐标的唯一来源
+    return False
+
+
+def spread_layers(members_of, y_of, nx, w_of, h_of, pad, rank, layer_off, locked=(),
+                  clear=18.0):
+    """同一依赖层里叠住的几块，绕着主轴往上下摊开。返回是否全部解开。
+
+    为什么不能只靠 stack_layers：它一次只解重叠最大的一对、被压的那个往下走，于是同层的
+    Memory / AgentCore / Verify（rank 都是 3）会一路串到底 —— L4 那一列排成 1673px 的长队，
+    每条进出边还要多绕几百像素。同一层本来就没有先后关系（它们之间的边来自记忆簇那个环），
+    并排摆着才是它的语义：主轴留原位，别人往上下让。
+
+    谁是主轴：这一堆里"跨度 × 成员数"最大的那块（横向铺得越开、框越多，接的边越多）。它
+    不动 —— 挪它等于把整层的进出边全部重排。别人按中心落在主轴中心的哪一边，抬到它上沿或
+    压到下沿；同一侧挤着好几块时，让得更远的那个先贴边（外圈先定），否则第二块会叠回第一块。
+
+    locked 里的长条层不参与（见 layer_lock）。摊开带来的偏移（主轴一侧挤两块时整堆会被顶偏）
+    由 tidy_layers 收尾，这里不掺和 —— 两件事分开写才不会互相把对方的成果抹掉。
+    """
+    def top(m):
+        return y_of[("n", m)] + layer_off(m)[1] - h_of[m] / 2
+
+    def rect(gid):
+        ms = members_of[gid]
+        x1 = min(nx[m] for m in ms) - pad
+        x2 = max(nx[m] + w_of[m] for m in ms) + pad
+        y1 = min(top(m) for m in ms) - pad
+        y2 = max(top(m) + h_of[m] for m in ms) + pad
+        return (x1, y1, x2 - x1, y2 - y1)
+
+    def hits():
+        out = []
+        for x, y in itertools.combinations(ids, 2):
+            a, b = rect(x), rect(y)
+            ox = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
+            oy = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
+            if ox > clear and oy > clear:
+                out.append((ox * oy, x, y))
+        return out
+
+    def peers(gid):                        # 同一堆（并列）的层
+        return [g for g in ids if rank.get(g, 0) == rank.get(gid, 0)]
+
+    def shift(gid, need):
+        for m in members_of[gid]:
+            y_of[("n", m)] += need                         # 节点坐标的唯一来源
+
+    ids = [g for g in sorted(members_of) if g not in set(locked)]
+    done = set()                           # 摊过的那堆：还压着就是别的层挡着，别死循环
+    for _ in range(len(ids) * len(ids) + 4):
+        now = hits()
+        if not now:
+            return True
+        same = [h for h in now if rank.get(h[1], 0) == rank.get(h[2], 0)]
+        if not same:
+            return False                                   # 只剩不同层的，交给 stack_layers
+        spine = max(peers(same[0][1]), key=lambda g: rect(g)[2] * len(members_of[g]))
+        if spine in done:                                  # 主轴不动也解不开：让给别人没用
+            return False
+        done.add(spine)
+        s = rect(spine)
+        mid = s[1] + s[3] / 2
+        group = [g for g in peers(spine) if g != spine]
+        below_l = sorted((g for g in group if rect(g)[1] + rect(g)[3] / 2 >= mid),
+                         key=lambda g: -(rect(g)[1] + rect(g)[3] / 2))
+        above_l = sorted((g for g in group if g not in below_l),
+                         key=lambda g: rect(g)[1] + rect(g)[3] / 2)
+        edge = s[1] + s[3] + clear                         # 下侧：由外向内贴边
+        for gid in below_l:
+            shift(gid, edge - rect(gid)[1])
+            edge = rect(gid)[1] + rect(gid)[3] + clear
+        edge = s[1] - clear                                # 上侧：由外向内贴边
+        for gid in above_l:
+            shift(gid, edge - (rect(gid)[1] + rect(gid)[3]))
+            edge = rect(gid)[1] - clear
+    return False
+
+
+def tidy_layers(members_of, y_of, nx, w_of, h_of, pad, rank, layer_off, locked=(),
+                clear=18.0):
+    """摊开同层之后收尾两件事：不许悬在画布外、把"下面空着一大片"的整堆提上去。
+
+    为什么单独一步：spread_layers 的规矩是主轴不动、别人绕它贴边。当主轴上方挤着两块时，
+    整堆会被整个顶到画布外（实测 AgentCore 上沿 -561）。这里不做二次推挤 —— 试过"回中 +
+    推挤"多轮迭代，两者互相抹掉对方的成果，画布从 1960 涨到 3127 —— 只做两件不引入新次序的事：
+
+    1. 悬出去的整堆按差值整体下移。基准取锁住的长条层（layer_lock）的上沿：它们不参与推挤，
+       位置就当画布的顶边用。不能拿"最高那块"当基准 —— 它自己就是被挪出去的那块，差值恒为 0。
+    2. 头顶空着的整堆往上贴到它上面最近那块的下沿。空隙不表示任何东西（上下次序由 rank 定），
+       留着只会让图比必要的长一半 —— 实测 L4 那一列和编译层之间空了 275px。
+
+    第 2 步的两条护栏，都对应一次回退：
+    - 只能提"自己头顶确实空着、而且提起来不会撞住任何别层"的那一堆：判据是提起来之后重算
+      一遍压住对数，变多了就放弃（试过 Foundation 提上去正好盖住 Schema）。
+    - 一轮只提最靠上的那一堆。同时提两堆的话，下面那堆会跟着上面那堆的空位走，实测会把
+      Delivery 拉到 Schema 同一行去。
+    """
+    def rect(gid):
+        ms = members_of[gid]
+        x1 = min(nx[m] for m in ms) - pad
+        x2 = max(nx[m] + w_of[m] for m in ms) + pad
+        y1 = min(y_of[("n", m)] + layer_off(m)[1] - h_of[m] / 2 for m in ms) - pad
+        y2 = max(y_of[("n", m)] + layer_off(m)[1] + h_of[m] / 2 for m in ms) + pad
+        return (x1, y1, x2 - x1, y2 - y1)
+
+    def clash_count():
+        n = 0
+        for a, b in itertools.combinations(list(members_of), 2):
+            ra, rb = rect(a), rect(b)
+            if (min(ra[0] + ra[2], rb[0] + rb[2]) - max(ra[0], rb[0]) > clear and
+                    min(ra[1] + ra[3], rb[1] + rb[3]) - max(ra[1], rb[1]) > clear):
+                n += 1
+        return n
+
+    ids = [g for g in sorted(members_of) if g not in set(locked)]
+    anchors = [g for g in sorted(members_of) if g in set(locked)]
+    moved = False
+
+    def shift(gids, need):
+        nonlocal moved
+        for gid in gids:
+            for m in members_of[gid]:
+                y_of[("n", m)] += need                     # 节点坐标的唯一来源
+        moved = True
+
+    if anchors and ids:                                    # 1) 悬在画布外的整堆拉回来
+        top = min(rect(g)[1] for g in anchors)             # 画布上边界（锁住层最高的上沿）
+        out = [g for g in ids if rect(g)[1] < top - clear]
+        if out:
+            worst = min(out, key=lambda g: rect(g)[1])
+            shift([g for g in ids if rank.get(g, 0) == rank.get(worst, 0)],
+                  top - rect(worst)[1])
+
+    for _ in range(len(ids) + 2):                          # 2) 头顶空着的整堆往上贴
+        best = None                                        # (上沿, 堆, 天花板)
+        for gid in ids:
+            peers = [g for g in ids if rank.get(g, 0) == rank.get(gid, 0)]
+            y1 = min(rect(g)[1] for g in peers)
+            ceil = None
+            for g in members_of:
+                if rank.get(g, 0) >= rank.get(gid, 0):
+                    continue                               # 只看真正在它上面的那些层
+                o, r = rect(g), rect(gid)
+                if min(r[0] + r[2], o[0] + o[2]) - max(r[0], o[0]) <= clear:
+                    continue                               # 横向不相干：不算天花板
+                bottom = o[1] + o[3]
+                if bottom >= y1 - clear:
+                    continue                               # 在下方或已经贴着
+                ceil = bottom if ceil is None else min(ceil, bottom)
+            if ceil is None or y1 - ceil <= clear:
+                continue
+            cand = (y1, peers, ceil)
+            if best is None or cand[0] < best[0]:
+                best = cand
+        if best is None:
+            break
+        _y1, peers, ceil = best
+        was = clash_count()
+        want = ceil + clear - min(rect(g)[1] for g in peers)
+        shift(peers, want)
+        if clash_count() > was:                            # 提上去会压住别层：退回来
+            shift(peers, -want)
+            break
+    return moved
+
+
+
+def group_clashes(members_of, y_of, nx, w_of, h_of, pad, layer_off, clear=18.0):
+    """还压在一起的层框对（含跨竖带的）：推挤解不掉的那部分，报给人看。"""
+    def top(m):
+        return y_of[("n", m)] + layer_off(m)[1] - h_of[m] / 2
+
+    def rect(gid):
+        ms = members_of[gid]
+        x1 = min(nx[m] for m in ms) - pad
+        x2 = max(nx[m] + w_of[m] for m in ms) + pad
+        y1 = min(top(m) for m in ms) - pad
+        y2 = max(top(m) + h_of[m] for m in ms) + pad
+        return (x1, y1, x2 - x1, y2 - y1)
+
+    out = []
+    for x, y in itertools.combinations(sorted(members_of), 2):
+        a, b = rect(x), rect(y)
+        ox = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
+        oy = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
+        if ox > clear and oy > clear:
+            out.append(f"{x}/{y}")
+    return out
+
 
 
 def load_rules(path):
@@ -618,6 +924,9 @@ def lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y, nx=None):
     six of them stack into one bundle and their labels sit on top of the lines.
     Each gap is divided into as many lanes as there are crossings, ordered by
     height, which spreads the bundle and frees space for the labels.
+
+    正边的横线已经按 y 排开（每根至少隔 lane_pitch），所以缝内等分就是对的通道分配；
+    改成"按占用分配"反而会把不同缝的竖段推到同一个 x 上（实测密集对从 17 涨到 78）。
     """
     # 每条通道在自己的列间隙里排开：列宽不等时，统一 gap 会把车道推到框上去
     gap_at = {g: max(36.0, x_of[g + 1] - x_of[g] - max(col_w.get(g, 0), col_w.get(g + 1, 0)))
@@ -636,7 +945,8 @@ def lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y, nx=None):
         rows.sort()
         n = len(rows)
         for k, (_y, idx) in enumerate(rows):
-            lane_x[(g, idx)] = x_of[g] + col_w.get(g, 0) +                 gap_at.get(g, 60.0) * (k + 1) / (n + 1)
+            lane_x[(g, idx)] = x_of[g] + col_w.get(g, 0) + \
+                gap_at.get(g, 60.0) * (k + 1) / (n + 1)
 
     geo = {}
     for idx, e in enumerate(edges):
@@ -972,10 +1282,13 @@ def build(config_path):
         la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
         for g in range(min(la, lb), max(la, lb)):
             demand[g] += 1
+    # 某条缝可以额外加宽（col_gap_extra.<列号>）：绕行带和列间隙叠在同一竖带上时，只有把
+    # 缝拉开才能让开 —— 自动推开解决不了"两个东西抢同一条带子"，那是布局问题。
+    col_extra = {int(k): float(v) for k, v in (layout.get("col_gap_extra") or {}).items()}
     x_of, cursor = {}, 0.0
     for l in sorted(layers):
         x_of[l] = cursor
-        cursor += col_w[l] + max(h_gap, demand[l] * lane_pitch)
+        cursor += col_w[l] + max(h_gap, demand[l] * lane_pitch) + col_extra.get(l, 0.0)
 
     # 层框偏移：挪一层 = 挪它的全部节点（边按节点位置连，所以边自动跟着走）。
     # 这是给"把这一层挪到那儿"一个正当出口：Mermaid 里没有这个接口
@@ -1001,6 +1314,33 @@ def build(config_path):
     for idx, e in enumerate(edges):
         out_slots[e["src"]].append(idx)
         in_slots[e["dst"]].append(idx)
+
+    pad_g = layout.get("group_padding", 22)
+    gclear = float(layout.get("group_clear", 18.0))
+    grp_of = {n: (doc.nodes[n].subgraph if n in doc.nodes else "") for n in ids}
+    between = [(grp_of[e["src"]], grp_of[e["dst"]]) for e in edges
+               if grp_of.get(e["src"]) and grp_of.get(e["src"]) != grp_of.get(e["dst"])]
+
+    members_of = collections.defaultdict(list)
+    for n in ids:
+        if grp_of[n] and grp_of[n] not in doc.legend_ids():
+            members_of[grp_of[n]].append(n)
+    members_of = dict(members_of)
+
+    def build_groups():
+        out = []
+        for k, ms in sorted(members_of.items()):
+            bcfg = boxes_cfg.get(k, {})    # 别叫 cfg：会遮蔽 build() 自己的配置
+            x1 = min(nx[m] for m in ms) - pad_g
+            x2 = max(nx[m] + w_of[m] for m in ms) + pad_g
+            y1 = min(ny[m] - h_of[m] / 2 for m in ms) - pad_g
+            y2 = max(ny[m] + h_of[m] / 2 for m in ms) + pad_g
+            out.append({"id": k, "title": doc.subgraphs.get(k, k),
+                        "x": round(x1, 1), "y": round(y1 - 14, 1),
+                        "w": round(max(x2 - x1, float(bcfg.get("w") or 0)), 1),
+                        "h": round(max(y2 - y1 + 14, float(bcfg.get("h") or 0)), 1),
+                        "members": sorted(ms)})
+        return out
 
     port_order = layout.get("port_order", {})
 
@@ -1030,7 +1370,34 @@ def build(config_path):
     # 不用自动对齐算法是因为它会改变 slot_y 的排序、进而改变接点，形成反馈。
     for nid, dny in layout.get("node_nudge", {}).items():
         if nid in ny:
+            # 落到 y_of：下面层框推挤会按 y_of 重算 ny，只改 ny 会被冲掉
+            y_of[("n", nid)] += float(dny)
             ny[nid] += float(dny)
+
+    # 层框不许互相压住。分组成员散落在多个列里，只能按层框的实际外框判 —— 按列判是错的
+    # （Memory / AgentCore / Verify 全在同一列 L4）。必须在端口高度算出来之前做：端口和
+    # 走线都由节点坐标推出来，框后动、线不动，测试就会报端点悬空。
+    if members_of:
+        locked = layout.get("layer_lock") or []
+        rank = layer_rank(set(members_of), between,
+                          lambda gid: min(y_of[("n", m)] + layer_off(m)[1]
+                                          for m in members_of[gid]))
+        args = (members_of, y_of, nx, w_of, h_of, pad_g, rank, layer_off, locked, gclear)
+        # 先摊同层（并排的绕主轴贴边），再解不同层（被压的整层下移）。反过来会白搬一次：
+        # stack_layers 先把同层的三块串成一列长队，spread_layers 再摊回原样。
+        spread_layers(*args)
+        tidy_layers(*args)          # 摊开把整堆顶出画布了，拉回来（只平移，不改次序）
+        if not stack_layers(members_of, y_of, nx, w_of, h_of, pad_g, rank, layer_off,
+                            locked, gclear, float(layout.get("group_min_move", 24.0))):
+            print("  警告：层框推挤没收敛，仍压住 —— "
+                  + "、".join(group_clashes(members_of, y_of, nx, w_of, h_of, pad_g,
+                                            layer_off, gclear)))
+        for n in ids:                       # 换算值跟着新坐标走
+            ny[n] = y_of[("n", n)] + layer_off(n)[1]
+        left = group_clashes(members_of, y_of, nx, w_of, h_of, pad_g, layer_off, gclear)
+        if left:
+            print(f"  提示：还剩 {len(left)} 对层框压住（{'、'.join(left)}）—— "
+                  "跨列的长条层不参与推挤，要解开就调 col_gap 或 layer_boxes")
 
     out_y = {idx: slot_y(e["src"], idx, out_slots[e["src"]], False) for idx, e in enumerate(edges)}
     in_y = {idx: slot_y(e["dst"], idx, in_slots[e["dst"]], True) for idx, e in enumerate(edges)}
@@ -1047,12 +1414,19 @@ def build(config_path):
         (i for i, e in enumerate(edges) if level_of.get(e["src"], 0) > level_of.get(e["dst"], 0)),
         key=lambda i: (min(level_of.get(edges[i]["src"], 0), level_of.get(edges[i]["dst"], 0)),
                        span(i))))}
+    gap_lanes = {}                         # (目标列, 源列) -> 这条缝里已用掉几条通道
+
+    # 层框不许互相压住。分组成员散落在多个列里，所以只能按层框的实际外框判 ——
+    # 按列判是错的（Memory / AgentCore / Verify 全在同一列 L4）。
+    # 分组框由成员包围盒算出，所以"整层下移"改的是成员坐标；改完要重算包围盒再判一次。
     out_y, in_y = align_ports(edges, ny, h_of, out_y, in_y,
                               layout.get("port_pitch", 13),
                               layout.get("align_max_step", 45),
                               layout.get("align_sweeps", 4))
 
     geo = lane_route(edges, level_of, x_of, y_of, col_w, w_of, out_y, in_y, nx)
+    rects = [(nx[n] + w_of[n] / 2, ny[n] - h_of[n] / 2, w_of[n], h_of[n]) for n in ids]
+    groups = build_groups()      # 成员可能动过，层框按新包围盒算
 
     # 声明式绕行（S10->S15 不许平穿 S11）。放在后处理之前：straighten 只并小折弯，
     # 这里绕行的竖段远大于 max_kink，不会被抹掉。
@@ -1063,62 +1437,107 @@ def build(config_path):
                       for n in ids},
                      avoid)
 
-    # 反向边与同列边：端点必须落在节点框边上，不能悬在顶边外面
-    for idx, e in enumerate(edges):
+    # 反向边与同列边：端点必须落在节点框边上，不能悬在顶边外面。
+    #
+    # 绕行 x 按"纵向占用"分配（第一次适应）：两条边的竖段在 y 上不重叠就可以共用同一根通道，
+    # 重叠了才往外让一条。以前是按跨度大小排号、每条固定 +7px —— 那条带子里挤了二十来条边，
+    # 于是相邻两条只差几个像素却要并排走几百 px（实测 x=1251 / 1255 的 S17->S18 与 S20->S14
+    # 并排 375px）。按占用分配之后，互不相干的边自然叠回同一根线上，图也窄了。
+    # 绕行边（同列不相邻 + 真反向）共用一套竖线：按"纵向占用"分配，两条边的竖段在 y 上
+    # 不重叠就共用一根线，重叠了才往外让一条 lane_pitch。
+    #
+    # 三条踩过的坑，都写在判据里：
+    #   1. 判据必须是区间重叠，不是端点距离 —— 两条竖段完全重合时端点差为 0，
+    #      用"端点差 < pitch"算冲突会把真正重合的两条漏掉（实测 S13->S28 与 S20->S14 并排 286px）。
+    #   2. x 必须对齐到同一张网格。同列边和反向边各自取起点，差 1px 就错开一格，
+    #      看着像两条线、其实只是平移了一像素（实测 1045 / 1046）。
+    #   3. 处理顺序：先同列绕行、再反向边。反过来时反向边会先占掉本列右侧那根线，
+    #      把同列绕行推到更外面（多绕 60px 且仍然重叠）。
+    lanes = []                              # [(x, (y1, y2)), ...] 已占用的绕行竖段
+
+    def lane_for(x_lo, span_y, min_gap):
+        """从 x_lo 起找第一根"要么纵向不重叠、要么横向隔得开"的通道，返回 (x, 缝是否够用)。
+
+        判据是区间重叠而不是端点距离：两条竖段完全重合时端点差为 0。
+        min_gap 由调用方按这条边要跨多远给（并排走得越远，肉眼越能看出贴在一起）。
+        """
+        lo, hi = span_y
+        x = math.ceil((x_lo - x_pad) / detour_pitch) * detour_pitch + x_pad
+        far = True                             # 整段扫描里"最近的那条"离得多远
+        while True:
+            clash = [abs(x - xx) for xx, (a, b) in lanes
+                     if abs(x - xx) < min_gap and min(hi, b) - max(lo, a) > 2]
+            if not clash:
+                break
+            far = False
+            x += detour_pitch
+        lanes.append((x, span_y))
+        return x, far
+
+    def detour(idx, e, la, lb):
+        nonlocal detour_tight
+        ya, yb = out_y[idx], in_y[idx]
+        wa, wb = w_of.get(e["src"], w), w_of.get(e["dst"], w)
+        # 并排走多远才算"贴在一起"：跨得越远越明显，取纵向跨度的一半（下限一个通道宽）。
+        gap = max(detour_pitch, abs(yb - ya) / 2)
+        if la == lb:                       # 同列：贴本列右侧走最小圈
+            x, ok = lane_for(nx[e["src"]] + max(wa, wb) + 10,
+                             (min(ya, yb), max(ya, yb)), gap)
+            geo[idx] = [(nx[e["src"]] + wa, ya), (x, ya), (x, yb), (nx[e["dst"]] + wa, yb)]
+        else:                              # 真反向：源左出、目标右入，竖段落在列间空档
+            # 起点要越过沿途各列节点框的右侧：同列绕行带就贴在那一排 x 上（实测 L4 列右边
+            # 挤了七八条），反向边压上去就是"两条并排走几百 px"。
+            lo = max(nx[l] + col_w.get(l, w) for l in range(lb, la + 1)) + 10
+            x, ok = lane_for(lo, (min(ya, yb), max(ya, yb)), gap)
+            geo[idx] = [(nx[e["src"]], ya), (x, ya), (x, yb), (nx[e["dst"]] + wb, yb)]
+        if not ok:
+            detour_tight += 1
+
+    x_pad = 10.0                           # 网格原点：所有绕行竖线都对齐到这里
+    detour_pitch = max(float(lane_pitch), 16.0)   # 绕行通道宽：列缝里的 lane_pitch 可以更小
+    detour_tight = 0                       # 挤不下的绕行边数（要加宽就调 col_gap_extra）
+
+    for idx, e in enumerate(edges):        # 第一轮：同列绕行先占位
+        if idx in geo or level_of.get(e["src"], 0) != level_of.get(e["dst"], 0):
+            continue
+        ya, yb = out_y[idx], in_y[idx]
+        wa, wb = w_of.get(e["src"], w), w_of.get(e["dst"], w)
+        cy_a, cy_b = ny[e["src"]], ny[e["dst"]]
+        ha, hb = h_of[e["src"]], h_of[e["dst"]]
+        gap = (max(cy_a, cy_b) - max(ha, hb) / 2) - (min(cy_a, cy_b) + min(ha, hb) / 2)
+        if gap > 26:                       # 上下相邻的走底边→顶边一条竖线，不占绕行通道
+            detour(idx, e, level_of[e["src"]], level_of[e["dst"]])
+
+    for idx, e in enumerate(edges):        # 第二轮：真反向 + 剩下的同列边
         if idx in geo:
             continue
         la, lb = level_of.get(e["src"], 0), level_of.get(e["dst"], 0)
         ya, yb = out_y[idx], in_y[idx]
         wa, wb = w_of.get(e["src"], w), w_of.get(e["dst"], w)
-        # 折点直接给成正交的 4 点折线，不再让 orthogonalize 从斜线里猜折点：
-        # 猜出来的折点落在线段中点，一条边白白多出两个转角。
-        if la == lb:                       # 同列：能直连就直连，上下相邻的框不该绕到侧面
+        if la == lb:
             cy_a, cy_b = ny[e["src"]], ny[e["dst"]]
             ha, hb = h_of[e["src"]], h_of[e["dst"]]
-            gap = (max(cy_a, cy_b) - max(ha, hb) / 2) - (min(cy_a, cy_b) + min(ha, hb) / 2)
-            if gap <= 26:                  # 上下相邻：底边→顶边，一条竖线，零折角
-                cx = min(nx[e["src"]] + w_of[e["src"]] / 2, nx[e["dst"]] + w_of[e["dst"]] / 2)
-                cx += (same_lanes.get(idx, 0) % 5 - 2) * 6
-                geo[idx] = [(cx, cy_a + ha / 2 if cy_b > cy_a else cy_a - ha / 2),
-                            (cx, cy_b - hb / 2 if cy_b > cy_a else cy_b + hb / 2)]
-            else:                          # 不相邻：贴本列右侧走最小圈
-                x = nx[e["src"]] + max(wa, wb) + 10 + same_lanes.get(idx, 0) * 7
-                geo[idx] = [(nx[e["src"]] + wa, ya), (x, ya), (x, yb), (nx[e["dst"]] + wb, yb)]
-        else:                              # 真反向：源左出、目标右入，竖段落在列间空档
-            n = max(1, len(back_lanes))
-            lo, hi = x_of[lb] + wb, x_of[la]
-            x = lo + (hi - lo) * (back_lanes.get(idx, 0) + 1) / (n + 1)
-            geo[idx] = [(nx[e["src"]], ya), (x, ya), (x, yb), (nx[e["dst"]] + wb, yb)]
+            cx = min(nx[e["src"]] + w_of[e["src"]] / 2, nx[e["dst"]] + w_of[e["dst"]] / 2)
+            cx += (same_lanes.get(idx, 0) % 5 - 2) * 6
+            geo[idx] = [(cx, cy_a + ha / 2 if cy_b > cy_a else cy_a - ha / 2),
+                        (cx, cy_b - hb / 2 if cy_b > cy_a else cy_b + hb / 2)]
+        else:
+            detour(idx, e, la, lb)
+
+    if detour_tight:
+        print(f"  提示：{detour_tight} 条绕行边挤在一起（这一带要并排走的边太多，"
+              f"加宽 col_gap_extra 或减少同列反向边）", file=sys.stderr)
 
     segs = [(owner, _boxed(_seg(a, b))) for owner, pts in geo.items()
             for a, b in zip(pts, pts[1:])]
-    rects = [(nx[n] + w_of[n] / 2, ny[n] - h_of[n] / 2, w_of[n], h_of[n]) for n in ids]
 
-    # 分组框：成员按各自的列散布，框就按成员实际位置包一圈。以前交互图不画分组，
-    # 于是它比 Mermaid 版难读，谁都不看它 —— 布局做得再好也没人看得见
-    pad_g = layout.get("group_padding", 22)
-    boxes = {}
-    for n in ids:
-        sub = doc.nodes.get(n).subgraph if n in doc.nodes else ""
-        if not sub or sub in doc.legend_ids():
-            continue
-        left, top = nx[n], ny[n] - h_of[n] / 2
-        box = boxes.setdefault(sub, [left, top, left + w_of[n], top + h, []])
-        box[0], box[1] = min(box[0], left), min(box[1], top)
-        box[2], box[3] = max(box[2], left + w_of[n]), max(box[3], top + h_of[n])
-        box[4].append(n)
-    groups = []
-    for k, b in sorted(boxes.items()):
-        bcfg = boxes_cfg.get(k, {})        # 别叫 cfg：会遮蔽 build() 自己的配置并返回错的东西
-        gw = max(b[2] - b[0] + pad_g * 2, float(bcfg.get("w") or 0))
-        gh = max(b[3] - b[1] + pad_g * 2 + 14, float(bcfg.get("h") or 0))
-        groups.append({"id": k, "title": doc.subgraphs.get(k, k),
-                       "x": round(b[0] - pad_g, 1), "y": round(b[1] - pad_g - 14, 1),
-                       "w": round(gw, 1), "h": round(gh, 1), "members": sorted(b[4])})
     # 接点最小间距（横向密集的主因）。放在最后、按最终几何拉开：align_ports 与绕行都会
     # 把接点拉到同一高度，先拉开再对齐等于白拉；而反向边/同列边的折线在上面那段才建好。
-    spread_sides(geo, edges, level_of, layout.get("port_pitch", 13), ny, h_of,
-                 port_order, layout.get("route_avoid") or {})
+    tight = spread_sides(geo, edges, level_of, layout.get("port_pitch", 13), ny, h_of,
+                         port_order, layout.get("route_avoid") or {})
+    if tight:
+        print(f"  提示：{tight} 个接点仍挤在 {layout.get('port_pitch', 13)}px 以内"
+              "（这一侧的框高装不下那么多接口，要解就加 node_min_height 或 row_gap）")
 
     # 三步必须按这个顺序：先保证只有横平竖直（正交化的测试在断言它），再合共线点，
     # 最后抹小折弯——顺序反了会把斜线当成横线合并。
@@ -1179,8 +1598,14 @@ def build(config_path):
         "box": {"w": w, "h": h},
         "level_x": {str(l): round(x, 1) for l, x in x_of.items()},
         "groups": groups,
-        "canvas": {"w": (x_of[max(x_of, default=0)] + col_w.get(max(x_of, default=0), 0) + 120),
-                   "h": (height + 1) * sy + 160},
+        # 画布要包住推完之后的层框，否则节点在画布里、层框在外面，页面上直接被裁掉
+        # 画布要包住推完之后的层框和边，否则节点在画布里、层框在外面，页面上直接被裁掉
+        "canvas": {"w": max(x_of[max(x_of, default=0)] + col_w.get(max(x_of, default=0), 0) + 120,
+                            max((b["x"] + b["w"] for b in groups), default=0) + 40),
+                   "h": max((height + 1) * sy + 160,
+                            max((b["y"] + b["h"] for b in groups), default=0) + 40,
+                            max((max(p_[1] for p_ in g_) for g_ in geo.values()),
+                                default=0) + 40)},
         "labels": [{"for": l["for"], "idx": l["idx"], "lx": round(l["lx"], 1),
                     "ly": round(l["ly"], 1), "w": round(l["w"], 1),
                     "on_own": l["on_own"], "cross_others": l["cross_others"]} for l in labels],
@@ -1191,7 +1616,10 @@ def build(config_path):
                   "labels_crossing_others": sum(1 for l in labels if l["cross_others"]),
                   # 调紧凑度要有数可看，不然只能凭眼睛判断"这次是不是变小了"
                   "avg_box_w": round(sum(w_of.values()) / len(w_of), 1) if w_of else 0,
-                  "box_overlaps": len(clash)},
+                  "box_overlaps": len(clash),
+                  # 层框重叠单独计一项：它是"推完还剩几对"，和框重叠不是一回事
+                  "group_overlaps": len(group_clashes(members_of, y_of, nx, w_of,
+                                                      h_of, pad_g, layer_off, gclear))},
     }
 
 

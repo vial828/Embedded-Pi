@@ -11,6 +11,7 @@ meant nobody could tell when they broke. Both are now testable without a browser
 node is optional - the JS tests skip when it is missing.
 """
 
+import itertools
 import json
 import re
 import shutil
@@ -239,6 +240,30 @@ def test_declared_port_order_is_the_drawn_top_to_bottom_order(built):
         listed = [k for k in seq if k in want]
         assert listed == [k for k in want if k in seq], \
             f"{nid} 出侧端口顺序是 {listed}，规则要的是 {want}"
+
+
+def test_movable_layer_boxes_do_not_overlap(built):
+    """同一竖带里不许有几个层框互相压住 —— 三块叠一起时图根本读不动（Memory / AgentCore /
+    Verify 都在 L4，各差几十像素，人眼只会看到"中间一坨"）。
+
+    长条层（layer_lock：Schema 横跨 L2-L5、Delivery 横跨 L5-L7）不在验收范围内：它们和谁
+    都叠得上，硬推开别人等于把整列甩到画布外，要解只能调 col_gap。断言只挑"两个都不在
+    layer_lock 里"的对 —— 加一层不用改测试。
+    """
+    lay = json.loads(RULES.read_text(encoding="utf-8"))["layout"]
+    locked = set(lay.get("layer_lock") or [])
+    boxes = {g["id"]: g for g in built["groups"]}
+    clear = lay.get("group_clear", 18)
+    bad = []
+    for a, b in itertools.combinations(sorted(boxes), 2):
+        if locked & {a, b}:
+            continue
+        ga, gb = boxes[a], boxes[b]
+        ox = min(ga["x"] + ga["w"], gb["x"] + gb["w"]) - max(ga["x"], gb["x"])
+        oy = min(ga["y"] + ga["h"], gb["y"] + gb["h"]) - max(ga["y"], gb["y"])
+        if ox > clear and oy > clear:
+            bad.append(f"{a}/{b}")
+    assert not bad, f"可动层框压住：{bad}"
 
 
 def test_layer_offsets_do_not_stack_boxes(built):
